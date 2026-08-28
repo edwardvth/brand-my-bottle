@@ -21,7 +21,7 @@ const dollarsToCents = (d) => Math.round(Number(d) * 100);
 const centsToDollars = (c) => Math.round(Number(c) / 100);
 
 // ---------- Config ----------
-const MODEL_URL = "bottle-slim.glb";
+const MODEL_URL = "stainless_steel_water_bottle.glb";
 const BODY_NODE_NAME = "Water Bottle_5";
 const STORAGE_KEY = "bmb.state.v7";
 const AUCTION_END = Date.now() + 12 * 86400 * 1000 + 14 * 3600 * 1000;
@@ -265,7 +265,7 @@ loader.load(MODEL_URL, (gltf) => {
   const aspect = Math.max(0.4, (rect.width || 1) / (rect.height || 1));
   const distForHeight = (fSize.y / 2) / Math.tan(fovRad / 2);
   const distForWidth  = (Math.max(fSize.x, fSize.z) / 2) / Math.tan(fovRad / 2) / aspect;
-  const distance = Math.max(distForHeight, distForWidth) * 1.15;
+  const distance = Math.max(distForHeight, distForWidth) * 0.95;   // tighter zoom — bottle fills more of the frame
   // Start camera on spot #1's axis so the spin naturally reveals #1 first.
   const startTheta = SPOT_CONFIG[0].theta;
   camera.position.set(
@@ -429,15 +429,17 @@ function makeStickerTexture(spotId, price, taken, geomAspect = 1.35, opts = {}) 
     //     color language as the empty stickers).
     //   - Smaller "Outbid · $N" line beneath, same cream color.
 
-    // Image dominates: paper card takes ~78% of sticker height so the logo
-    // reads even at a distance. Brand + outbid text sit tight beneath.
+    // Image dominates but text sizes bumped so brand + outbid stay readable
+    // from real bottle distance. Card slightly smaller (0.66 vs 0.78) to make
+    // room; the trade-off is worth it since the image is still the biggest
+    // element on the sticker.
     const inner  = { x: pad, y: pad, w: c.width - pad * 2, h: c.height - pad * 2 };
-    const cardH  = Math.round(inner.h * 0.78);
-    const brandSize   = Math.round(inner.h * 0.11);
-    const outbidSize  = Math.round(inner.h * 0.08);
-    const gapTextTop  = Math.round(inner.h * 0.025);
+    const cardH  = Math.round(inner.h * 0.66);
+    const brandSize   = Math.round(inner.h * 0.19);
+    const outbidSize  = Math.round(inner.h * 0.13);
+    const gapTextTop  = Math.round(inner.h * 0.03);
     const brandY      = inner.y + cardH + gapTextTop + brandSize * 0.55;
-    const outbidY     = brandY + brandSize * 0.55 + outbidSize * 0.75;
+    const outbidY     = brandY + brandSize * 0.60 + outbidSize * 0.80;
 
     // Paper card behind logo (catches transparent-PNG artwork)
     ctx.fillStyle = paper;

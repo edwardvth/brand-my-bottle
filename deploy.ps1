@@ -16,7 +16,7 @@ $PublicFiles = @(
     "index.html",
     "app.js",
     "styles.css",
-    "bottle-slim.glb"
+    "stainless_steel_water_bottle.glb"
 )
 
 Write-Output "Rebuilding dist/..."
