@@ -188,20 +188,26 @@ let bottomCap = null;          // recreated with placeholder AND with real bottl
 // and the real bottle render at these dimensions, so the camera never needs to
 // re-frame when the GLB lands (no jump, no jitter).
 function frameCameraOnce() {
+  // The body is centered at TARGET_BODY_CENTERY, but the CAP sits ABOVE
+  // the body's top edge. So the true midpoint of the whole bottle (body +
+  // cap) is shifted up by ~cap_height/2. Framing to body-center alone
+  // clips the cap off the top of the view (the "no cap" bug from image 76).
+  const fullMidY  = TARGET_BODY_CENTERY + TARGET_CAP_HEIGHT / 2;
+  const halfSpan  = (TARGET_BODY_HEIGHT + TARGET_CAP_HEIGHT) / 2;
   const fovRad = camera.fov * Math.PI / 180;
   const rect = canvasEl.getBoundingClientRect();
   const aspect = Math.max(0.4, (rect.width || 1) / (rect.height || 1));
-  const distForHeight = (TARGET_TOTAL_HEIGHT / 2) / Math.tan(fovRad / 2);
+  const distForHeight = halfSpan / Math.tan(fovRad / 2);
   const distForWidth  = TARGET_BODY_RADIUS / Math.tan(fovRad / 2) / aspect;
-  let distance = Math.max(distForHeight, distForWidth) * 1.15;
+  let distance = Math.max(distForHeight, distForWidth) * 1.20;   // 1.20 headroom so nothing kisses the edge
   if (!Number.isFinite(distance) || distance <= 0) distance = 1.5;
   const startTheta = SPOT_CONFIG[0].theta;
   camera.position.set(
     distance * Math.cos(startTheta),
-    TARGET_BODY_CENTERY + TARGET_TOTAL_HEIGHT * 0.05,
+    fullMidY + halfSpan * 0.08,
     distance * Math.sin(startTheta)
   );
-  controls.target.set(0, TARGET_BODY_CENTERY, 0);
+  controls.target.set(0, fullMidY, 0);
   controls.minDistance = distance * 0.45;
   controls.maxDistance = distance * 1.9;
   controls.update();
@@ -602,16 +608,17 @@ function makeStickerTexture(spotId, price, taken, geomAspect = 1.35, opts = {}) 
     //     color language as the empty stickers).
     //   - Smaller "Outbid · $N" line beneath, same cream color.
 
-    // Image still dominates but text below is now big enough to read at
-    // real bottle distance. Card is 68% of sticker (was 78%); brand + outbid
-    // scaled up accordingly.
+    // Taken stickers are TALLER (1.35× — see buildStickers). Ratios below
+    // are of the TALLER canvas, chosen so that:
+    //   - paper card physical size ≈ same as empty sticker (0.78 × 1/1.35 = 0.578)
+    //   - brand + outbid text physical size ≈ 70% bigger than the old cramped layout
     const inner  = { x: pad, y: pad, w: c.width - pad * 2, h: c.height - pad * 2 };
-    const cardH  = Math.round(inner.h * 0.66);
-    const brandSize   = Math.round(inner.h * 0.19);
-    const outbidSize  = Math.round(inner.h * 0.13);
-    const gapTextTop  = Math.round(inner.h * 0.03);
+    const cardH  = Math.round(inner.h * 0.58);
+    const brandSize   = Math.round(inner.h * 0.14);
+    const outbidSize  = Math.round(inner.h * 0.10);
+    const gapTextTop  = Math.round(inner.h * 0.04);
     const brandY      = inner.y + cardH + gapTextTop + brandSize * 0.55;
-    const outbidY     = brandY + brandSize * 0.60 + outbidSize * 0.75;
+    const outbidY     = brandY + brandSize * 0.60 + outbidSize * 0.80;
 
     // Paper card behind logo (catches transparent-PNG artwork)
     ctx.fillStyle = paper;
@@ -705,8 +712,17 @@ function buildStickers() {
     const wMul = cfg.wMul ?? cfg.sizeMul ?? 1.0;
     const hMul = cfg.hMul ?? cfg.sizeMul ?? 1.0;
     const arcAngle = baseArc * wMul;
-    const stickerH = baseHeight * hMul;
-    const yWorld   = bodyGeom.centerY + cfg.y * bandHalfHeight;
+    // Taken stickers grow taller so the brand + outbid text has real room
+    // WITHOUT shrinking the paper card that holds the logo. The extra
+    // height extends DOWNWARD onto the bottle (top edge stays put), so
+    // the card sits where an empty sticker's card would.
+    const TAKEN_STRETCH = 1.35;
+    const baseStickerH = baseHeight * hMul;
+    const stickerH = taken ? baseStickerH * TAKEN_STRETCH : baseStickerH;
+    const yWorldEmpty = bodyGeom.centerY + cfg.y * bandHalfHeight;
+    const yWorld = taken
+      ? yWorldEmpty - (stickerH - baseStickerH) / 2
+      : yWorldEmpty;
 
     // Local radius at this sticker's exact position (handles taper)
     const localR = localRadiusAt(cfg.theta, yWorld);
