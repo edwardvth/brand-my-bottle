@@ -295,15 +295,24 @@ loader.load(MODEL_URL, (gltf) => {
   const aspect = Math.max(0.4, (rect.width || 1) / (rect.height || 1));
   const distForHeight = (fSize.y / 2) / Math.tan(fovRad / 2);
   const distForWidth  = (Math.max(fSize.x, fSize.z) / 2) / Math.tan(fovRad / 2) / aspect;
-  // Both viewports load with the camera on the bottle's FRONT axis (+X) at the
-  // owner-tuned distance from 2026-08-28. This orientation shows the front
-  // die stickers head-on while side spots 4/11 (right) and 5/10 (left) wrap
-  // in half-visible at the silhouette edges.
+  // Both viewports load at the owner-tuned spherical view (2026-08-28):
+  //   azimuth = -75° (measured from +Z, positive toward +X — three.js convention)
+  //   elevation = 14° (above the equator)
+  //   distance + target from earlier dev-panel tune
   const isMobile = rect.width < 640;
   const distance = isMobile ? 1.480 : 1.637;
   const targetY  = isMobile ? -0.041 : -0.082;
-  camera.position.set(distance, targetY, 0);   // on +X axis = dead-front view
+  const azimuthDeg   = -75;
+  const elevationDeg =  14;
+  const theta = THREE.MathUtils.degToRad(azimuthDeg);
+  const phi   = THREE.MathUtils.degToRad(90 - elevationDeg);
+  const sinPhi = Math.sin(phi);
   controls.target.set(0, targetY, 0);
+  camera.position.set(
+    sinPhi * distance * Math.sin(theta),
+    targetY + Math.cos(phi) * distance,
+    sinPhi * distance * Math.cos(theta)
+  );
   controls.minDistance = distance * 0.45;
   controls.maxDistance = distance * 1.9;
   controls.update();
