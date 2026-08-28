@@ -272,24 +272,35 @@ loader.load(MODEL_URL, (gltf) => {
   const aspect = Math.max(0.4, (rect.width || 1) / (rect.height || 1));
   const distForHeight = (fSize.y / 2) / Math.tan(fovRad / 2);
   const distForWidth  = (Math.max(fSize.x, fSize.z) / 2) / Math.tan(fovRad / 2) / aspect;
-  // Mobile: slight zoom-out for headroom, and only a small upward bias — the
-  // bottle should sit lower / bigger than my previous overly-tight settings
-  // so it reads as a full "look at this bottle" hero, not a floating chip.
   const isMobile = rect.width < 640;
-  const distMul   = isMobile ? 1.12 : 1.08;
-  const raiseFrac = isMobile ? 0.06 : 0.12;
-  const distance = Math.max(distForHeight, distForWidth) * distMul;
-  const startTheta = SPOT_CONFIG[0].theta;
-  const lookY = fCenter.y - fSize.y * raiseFrac;
-  camera.position.set(
-    distance * Math.cos(startTheta),
-    lookY,
-    distance * Math.sin(startTheta)
-  );
-  controls.target.set(0, lookY, 0);
-  controls.minDistance = distance * 0.45;
-  controls.maxDistance = distance * 1.9;
-  controls.update();
+  if (!isMobile) {
+    // DESKTOP — locked to the exact view the owner tuned in the dev panel
+    // (2026-08-28). Camera + target coords come straight from the saved
+    // JSON payload; distance/az/el are just for zoom-clamp math.
+    camera.position.set(0.955, -0.082, 1.329);
+    controls.target.set(0, -0.082, 0);
+    const distance = 1.637;
+    controls.minDistance = distance * 0.45;
+    controls.maxDistance = distance * 1.9;
+    controls.update();
+  } else {
+    // MOBILE — auto-frame with a small zoom-out for headroom + a slight
+    // upward bias so the bottle reads as a full hero on the phone.
+    const distMul   = 1.12;
+    const raiseFrac = 0.06;
+    const distance = Math.max(distForHeight, distForWidth) * distMul;
+    const startTheta = SPOT_CONFIG[0].theta;
+    const lookY = fCenter.y - fSize.y * raiseFrac;
+    camera.position.set(
+      distance * Math.cos(startTheta),
+      lookY,
+      distance * Math.sin(startTheta)
+    );
+    controls.target.set(0, lookY, 0);
+    controls.minDistance = distance * 0.45;
+    controls.maxDistance = distance * 1.9;
+    controls.update();
+  }
 
   // Add a bottom cap disc — this .glb's body mesh is open at the bottom, so
   // looking up from below revealed the sticker on the far side through the void.
