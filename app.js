@@ -213,7 +213,7 @@ function frameCameraOnce() {
 // lands the swap is atomic (same frame) and the stickers do not move.
 function mountPlaceholder() {
   if (placeholderGroup) return;
-  const mat = new THREE.MeshStandardMaterial({
+  const silverMat = new THREE.MeshStandardMaterial({
     color: 0xdcdcdc,
     metalness: 1.0,
     roughness: 0.14,
@@ -221,38 +221,49 @@ function mountPlaceholder() {
   });
   placeholderGroup = new THREE.Group();
 
-  // Body cylinder — sized to EXACT target dimensions
-  const bodyCyl = new THREE.Mesh(
-    new THREE.CylinderGeometry(
-      TARGET_BODY_RADIUS,
-      TARGET_BODY_RADIUS,
-      TARGET_BODY_HEIGHT,
-      64, 1, false
-    ),
-    mat
-  );
-  bodyCyl.position.y = TARGET_BODY_CENTERY;
-  placeholderGroup.add(bodyCyl);
+  // Water-bottle silhouette via LatheGeometry — body cylinder that rounds off
+  // into a shoulder and neck, exactly like a Hydro-Flask-style bottle. This
+  // reads as "a water bottle" instantly instead of a soda can.
+  const R = TARGET_BODY_RADIUS;
+  const H = TARGET_BODY_HEIGHT;
+  const yBot = TARGET_BODY_CENTERY - H / 2;
+  const yTop = TARGET_BODY_CENTERY + H / 2;
+  const profile = [
+    new THREE.Vector2(R * 0.08, yBot),                 // bottom center (nearly closed)
+    new THREE.Vector2(R * 0.98, yBot + H * 0.015),     // rounded bottom edge
+    new THREE.Vector2(R,         yBot + H * 0.04),     // reach full radius
+    new THREE.Vector2(R,         yBot + H * 0.82),     // straight barrel
+    new THREE.Vector2(R * 0.93,  yBot + H * 0.88),     // shoulder start
+    new THREE.Vector2(R * 0.78,  yBot + H * 0.93),     // shoulder curve
+    new THREE.Vector2(R * 0.58,  yBot + H * 0.98),     // neck top
+    new THREE.Vector2(R * 0.55,  yTop),                 // neck flat
+  ];
+  const bodyLathe = new THREE.Mesh(new THREE.LatheGeometry(profile, 64), silverMat);
+  placeholderGroup.add(bodyLathe);
 
-  // Rounded shoulder tapering to the cap
-  const shoulderH = TARGET_CAP_HEIGHT * 0.55;
-  const shoulder = new THREE.Mesh(
-    new THREE.CylinderGeometry(TARGET_BODY_RADIUS * 0.55, TARGET_BODY_RADIUS, shoulderH, 48),
-    mat
-  );
-  shoulder.position.y = TARGET_BODY_CENTERY + TARGET_BODY_HEIGHT / 2 + shoulderH / 2;
-  placeholderGroup.add(shoulder);
-
-  // Dark screw-cap on top
-  const capH = TARGET_CAP_HEIGHT * 0.45;
+  // Dark textured screw-cap on top — chunkier and slightly wider than the
+  // neck so it reads as a real cap, not a cork.
+  const capH   = TARGET_CAP_HEIGHT;
+  const capR   = R * 0.62;
+  const capMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, metalness: 0.6, roughness: 0.45 });
   const cap = new THREE.Mesh(
-    new THREE.CylinderGeometry(TARGET_BODY_RADIUS * 0.55, TARGET_BODY_RADIUS * 0.55, capH, 48),
-    new THREE.MeshStandardMaterial({ color: 0x232323, metalness: 0.7, roughness: 0.35 })
+    new THREE.CylinderGeometry(capR, capR, capH * 0.82, 48),
+    capMat
   );
-  cap.position.y = shoulder.position.y + shoulderH / 2 + capH / 2;
+  cap.position.y = yTop + capH * 0.41;
   placeholderGroup.add(cap);
+  // Small brim ring where cap meets neck
+  const brim = new THREE.Mesh(
+    new THREE.CylinderGeometry(capR * 1.05, capR * 1.05, capH * 0.12, 48),
+    capMat
+  );
+  brim.position.y = yTop + capH * 0.06;
+  placeholderGroup.add(brim);
 
   scene.add(placeholderGroup);
+  // Body cylinder alias so downstream code that expects a cylinder-like proxy
+  // (raycast target, taper detection) still works with the lathe silhouette.
+  const bodyCyl = bodyLathe;
 
   // Give raycasts + sticker taper-detection a target that MATCHES the real
   // bottle's final radius / height / centerY exactly.
@@ -591,15 +602,16 @@ function makeStickerTexture(spotId, price, taken, geomAspect = 1.35, opts = {}) 
     //     color language as the empty stickers).
     //   - Smaller "Outbid · $N" line beneath, same cream color.
 
-    // Image dominates: paper card takes ~78% of sticker height so the logo
-    // reads even at a distance. Brand + outbid text sit tight beneath.
+    // Image still dominates but text below is now big enough to read at
+    // real bottle distance. Card is 68% of sticker (was 78%); brand + outbid
+    // scaled up accordingly.
     const inner  = { x: pad, y: pad, w: c.width - pad * 2, h: c.height - pad * 2 };
-    const cardH  = Math.round(inner.h * 0.78);
-    const brandSize   = Math.round(inner.h * 0.11);
-    const outbidSize  = Math.round(inner.h * 0.08);
-    const gapTextTop  = Math.round(inner.h * 0.025);
+    const cardH  = Math.round(inner.h * 0.66);
+    const brandSize   = Math.round(inner.h * 0.19);
+    const outbidSize  = Math.round(inner.h * 0.13);
+    const gapTextTop  = Math.round(inner.h * 0.03);
     const brandY      = inner.y + cardH + gapTextTop + brandSize * 0.55;
-    const outbidY     = brandY + brandSize * 0.55 + outbidSize * 0.75;
+    const outbidY     = brandY + brandSize * 0.60 + outbidSize * 0.75;
 
     // Paper card behind logo (catches transparent-PNG artwork)
     ctx.fillStyle = paper;
