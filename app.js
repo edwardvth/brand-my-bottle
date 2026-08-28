@@ -115,15 +115,28 @@ controls.autoRotate = true;           // slow spin when idle
 controls.autoRotateSpeed = 0.7;
 // min/maxDistance set after model loads so they scale with the bottle
 
-// Drag guard so click doesn't fire mid-drag. Autorotate pauses ONLY while user
-// is actively holding down (mouse or finger). Releases resume the spin from the
-// current camera angle at the same speed — no reset.
+// Drag guard so click/tap doesn't fire mid-drag. Autorotate pauses ONLY while
+// user is actively holding down (mouse or finger). Releases resume the spin
+// from the current camera angle at the same speed — no reset.
+//
+// Uses a distance THRESHOLD (px from pointerdown position) rather than any-
+// motion because touch events always fire tiny pointermove during a real tap
+// (finger wobble), which would flip didDrag=true and kill the bid modal.
+const DRAG_THRESHOLD_PX = 10;
 let didDrag = false;
-canvasEl.addEventListener("pointerdown", () => {
+let downX = 0, downY = 0;
+canvasEl.addEventListener("pointerdown", (e) => {
   didDrag = false;
+  downX = e.clientX;
+  downY = e.clientY;
   controls.autoRotate = false;
 });
-canvasEl.addEventListener("pointermove", (e) => { if (e.buttons > 0) didDrag = true; });
+canvasEl.addEventListener("pointermove", (e) => {
+  if (e.buttons === 0 && e.pointerType !== "touch") return;
+  const dx = e.clientX - downX;
+  const dy = e.clientY - downY;
+  if (Math.hypot(dx, dy) > DRAG_THRESHOLD_PX) didDrag = true;
+});
 canvasEl.addEventListener("pointerup",     () => { controls.autoRotate = true; });
 canvasEl.addEventListener("pointerleave",  () => { controls.autoRotate = true; });
 canvasEl.addEventListener("pointercancel", () => { controls.autoRotate = true; });
@@ -318,7 +331,7 @@ loader.load(MODEL_URL, (gltf) => {
     `body mesh: ${bottleMesh?.name}\n` +
     `hidden meshes: ${hiddenCount}\n` +
     `radius: ${bodyGeom.radius.toFixed(3)}  height: ${bodyGeom.height.toFixed(3)}\n` +
-    `centerY: ${bodyGeom.centerY.toFixed(3)}  camera dist: ${distance.toFixed(3)}\n` +
+    `centerY: ${bodyGeom.centerY.toFixed(3)}\n` +
     `stickers: ${stickerMeshes.length}/${TOTAL}`
   );
 }, undefined, (err) => {
@@ -760,6 +773,18 @@ const DEV_ON_KEY   = "bmb.dev.on";
     status.textContent = msg;
     if (ms) setTimeout(() => { if (status.textContent === msg) status.textContent = ""; }, ms);
   }
+
+  // Collapse the panel by default on mobile so it doesn't block the bottle.
+  // Header (dev-toggle) toggles state; state persists across reloads.
+  const COLL_KEY = "bmb.dev.collapsed";
+  const startCollapsed = window.innerWidth < 640
+    ? (localStorage.getItem(COLL_KEY) !== "no")   // mobile default: collapsed
+    : (localStorage.getItem(COLL_KEY) === "yes"); // desktop default: expanded
+  panel.classList.toggle("collapsed", startCollapsed);
+  $("dev-toggle").addEventListener("click", () => {
+    const collapsed = panel.classList.toggle("collapsed");
+    localStorage.setItem(COLL_KEY, collapsed ? "yes" : "no");
+  });
 
   $("dev-save").addEventListener("click", () => {
     const cp = camera.position;

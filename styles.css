@@ -681,12 +681,25 @@ footer a:hover { color: var(--teal); }
 }
 .dev-panel[hidden] { display: none; }
 .dev-panel-title {
+  appearance: none;
+  width: 100%;
+  background: transparent;
+  border: 0;
+  padding: 0 0 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   font: 700 11px/1 Inter, sans-serif;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--teal-soft);
-  margin-bottom: 10px;
+  cursor: pointer;
+  text-align: left;
 }
+.dev-chevron { transition: transform 200ms ease; font-size: 12px; }
+.dev-panel.collapsed .dev-chevron { transform: rotate(-90deg); }
+.dev-panel.collapsed .dev-panel-body { display: none; }
+.dev-panel.collapsed .dev-panel-title { padding-bottom: 0; }
 .dev-panel-row {
   display: flex; align-items: center; justify-content: space-between;
   padding: 3px 0;
@@ -718,6 +731,26 @@ footer a:hover { color: var(--teal); }
   font: 500 11px/1.2 Inter, sans-serif;
   color: var(--teal-soft);
   opacity: 0.9;
+}
+
+/* Mobile: dev panel becomes a small tap-to-expand pill so it doesn't block
+   the bottle. Defaults to collapsed (JS sets .collapsed on <640px viewports). */
+@media (max-width: 640px) {
+  .dev-panel {
+    top: 8px; left: 8px;
+    min-width: 0;
+    max-width: 220px;
+    padding: 8px 10px;
+    font-size: 11px;
+  }
+  .dev-panel-title { padding-bottom: 6px; font-size: 10px; }
+  .dev-panel.collapsed {
+    padding: 6px 10px;
+    max-width: 100px;
+    opacity: 0.72;
+  }
+  .dev-panel.collapsed:hover, .dev-panel.collapsed:active { opacity: 1; }
+  .dev-btn { padding: 6px 8px; font-size: 11px; }
 }
 
 /* ================================================================
