@@ -23,6 +23,11 @@ const centsToDollars = (c) => Math.round(Number(c) / 100);
 // ---------- Config ----------
 const MODEL_URL = "bottle-slim.glb";
 const BODY_NODE_NAME = "Water Bottle_5";
+// The GLB's real chunky screw-cap lives in a SEPARATE top-level node called
+// "Bottle Cap _3" (note the trailing space + descendants Object_4..Object_7).
+// Object_14 under "Water Bottle_5" is only the neck-collar ring, which is
+// why the top of the bottle looks like an OPEN spout without this node.
+const CAP_NODE_NAME  = "Bottle Cap _3";
 const STORAGE_KEY = "bmb.state.v7";
 const AUCTION_END = Date.now() + 12 * 86400 * 1000 + 14 * 3600 * 1000;
 const MIN_INCREMENT = 1;
@@ -168,10 +173,11 @@ loader.load(MODEL_URL, (gltf) => {
   // and its cap top (Object_14). Keep everything under this node visible; hide the
   // stand / duplicate bottles that live elsewhere in the scene.
   const bodyRoot = findNodeByName(root, BODY_NODE_NAME);
+  const capRoot  = findNodeByName(root, CAP_NODE_NAME);
   const keepMeshes = new Set();
-  // Track the cap mesh separately — it needs a DIFFERENT material or it
-  // visually merges into the body (chrome-on-chrome, no visible cap).
-  let capMesh = null;
+  // Track cap meshes separately — they need a DIFFERENT material or they
+  // visually merge into the body (chrome-on-chrome, no visible cap).
+  const capMeshes = new Set();
   if (bodyRoot) {
     bodyRoot.traverse((child) => {
       if (child.isMesh && child.geometry) {
@@ -184,10 +190,20 @@ loader.load(MODEL_URL, (gltf) => {
         }
       }
     });
-    // Anything under Water Bottle_5 that isn't the body IS the cap (there's
-    // exactly one such mesh in this GLB: Object_14).
+    // Anything under Water Bottle_5 that isn't the body is the neck-collar
+    // ring (Object_14) — treat as cap so it gets the dark material.
     bodyRoot.traverse((child) => {
-      if (child.isMesh && child !== bottleMesh) capMesh = child;
+      if (child.isMesh && child !== bottleMesh) capMeshes.add(child);
+    });
+  }
+  // The actual chunky screw-cap lives in its own top-level node — keep every
+  // mesh under it visible AND tag as cap-material.
+  if (capRoot) {
+    capRoot.traverse((child) => {
+      if (child.isMesh && child.geometry) {
+        keepMeshes.add(child);
+        capMeshes.add(child);
+      }
     });
   }
   // Fallback: tallest mesh anywhere
@@ -227,7 +243,7 @@ loader.load(MODEL_URL, (gltf) => {
       hiddenCount++;
       return;
     }
-    const mat = (child === capMesh) ? capMat : silverMat;
+    const mat = capMeshes.has(child) ? capMat : silverMat;
     if (Array.isArray(child.material)) {
       child.material = child.material.map(() => mat);
     } else if (child.material) {
