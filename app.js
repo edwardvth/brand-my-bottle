@@ -27,7 +27,10 @@ const BODY_NODE_NAME = "Water Bottle_5";
 // "Bottle Cap _3" (note the trailing space + descendants Object_4..Object_7).
 // Object_14 under "Water Bottle_5" is only the neck-collar ring, which is
 // why the top of the bottle looks like an OPEN spout without this node.
-const CAP_NODE_NAME  = "Bottle Cap _3";
+// (We don't try to import the GLB's own "Bottle Cap _3" node anymore —
+// its baked transforms scale wildly against the body's non-uniform width
+// scale, producing a mushroom cap much wider than the body. We add a
+// procedural cap in three.js instead, after the body is sized.)
 const STORAGE_KEY = "bmb.state.v7";
 const AUCTION_END = Date.now() + 12 * 86400 * 1000 + 14 * 3600 * 1000;
 const MIN_INCREMENT = 1;
@@ -173,10 +176,9 @@ loader.load(MODEL_URL, (gltf) => {
   // and its cap top (Object_14). Keep everything under this node visible; hide the
   // stand / duplicate bottles that live elsewhere in the scene.
   const bodyRoot = findNodeByName(root, BODY_NODE_NAME);
-  const capRoot  = findNodeByName(root, CAP_NODE_NAME);
   const keepMeshes = new Set();
-  // Track cap meshes separately — they need a DIFFERENT material or they
-  // visually merge into the body (chrome-on-chrome, no visible cap).
+  // Neck-collar mesh under Water Bottle_5 (Object_14) — needs its own dark
+  // material or it merges into the chrome body.
   const capMeshes = new Set();
   if (bodyRoot) {
     bodyRoot.traverse((child) => {
@@ -184,26 +186,13 @@ loader.load(MODEL_URL, (gltf) => {
         child.geometry.computeBoundingBox();
         const dims = getDims(child.geometry.boundingBox);
         keepMeshes.add(child);
-        // The body is the tallest mesh in this sub-tree
         if (!bottleMesh || dims.y > (bottleMesh.geometry.boundingBox.max.y - bottleMesh.geometry.boundingBox.min.y)) {
           bottleMesh = child;
         }
       }
     });
-    // Anything under Water Bottle_5 that isn't the body is the neck-collar
-    // ring (Object_14) — treat as cap so it gets the dark material.
     bodyRoot.traverse((child) => {
       if (child.isMesh && child !== bottleMesh) capMeshes.add(child);
-    });
-  }
-  // The actual chunky screw-cap lives in its own top-level node — keep every
-  // mesh under it visible AND tag as cap-material.
-  if (capRoot) {
-    capRoot.traverse((child) => {
-      if (child.isMesh && child.geometry) {
-        keepMeshes.add(child);
-        capMeshes.add(child);
-      }
     });
   }
   // Fallback: tallest mesh anywhere
@@ -321,6 +310,26 @@ loader.load(MODEL_URL, (gltf) => {
   bottomCap.rotation.x = Math.PI / 2;                 // face downward
   bottomCap.position.y = bodyGeom.centerY - bodyGeom.height / 2;
   scene.add(bottomCap);
+
+  // Procedural screw-cap on top of the body. The GLB's own cap node has
+  // baked transforms that mangle when the body is non-uniformly scaled;
+  // building the cap in three.js from scratch guarantees it fits.
+  const capR    = bodyGeom.radius * 0.62;                 // narrower than body — sits on the taper
+  const capH    = bodyGeom.height * 0.14;                 // ~14% of body height
+  const capBaseY = bodyGeom.centerY + bodyGeom.height / 2; // where the body top ends
+  const cap = new THREE.Mesh(
+    new THREE.CylinderGeometry(capR, capR, capH * 0.85, 48),
+    capMat
+  );
+  cap.position.y = capBaseY + (capH * 0.85) / 2;
+  scene.add(cap);
+  // Small brim ring where the cap meets the neck
+  const brim = new THREE.Mesh(
+    new THREE.CylinderGeometry(capR * 1.06, capR * 1.06, capH * 0.14, 48),
+    capMat
+  );
+  brim.position.y = capBaseY + (capH * 0.07);
+  scene.add(brim);
 
   resize();
 

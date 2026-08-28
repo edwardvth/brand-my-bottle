@@ -9,10 +9,11 @@ import { MeshoptEncoder } from "meshoptimizer";
 
 const INPUT  = "stainless_steel_water_bottle.glb";
 const OUTPUT = "bottle-slim.glb";
-// Keep BOTH the bottle body node AND the chunky screw-cap node. The cap is a
-// separate top-level node in this GLB (Object_14 under Water Bottle_5 is only
-// a thin neck-collar ring — not the actual cap the user expects to see).
-const KEEP_NODES = ["Water Bottle_5", "Bottle Cap _3"];
+// Keep only the bottle body subtree. The GLB's "Bottle Cap _3" node has a
+// baked-in transform that scales wildly when the body is non-uniformly
+// resized (see git 09dd4fe screenshot — huge mushroom cap over tiny body).
+// We add our own procedural cap in app.js instead — simpler, always fits.
+const KEEP_NODES = ["Water Bottle_5"];
 
 const io = new NodeIO().registerExtensions(KHRONOS_EXTENSIONS);
 const doc = await io.read(INPUT);
