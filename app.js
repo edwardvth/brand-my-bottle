@@ -722,6 +722,11 @@ canvasEl.addEventListener("pointermove", (e) => {
   canvasEl.style.cursor = "pointer";
 });
 canvasEl.addEventListener("pointerleave", (e) => {
+  // Skip on touch — on a mobile tap the finger lifts and pointerleave fires
+  // between pointerup and click, which was hiding the pill before the click
+  // on the Outbid button (or any link) could fire. Dismiss for touch is
+  // handled by the document-level pointerdown handler further down.
+  if (e.pointerType === "touch") return;
   // Moving onto the pill (btn or info card, which are clickable) should NOT
   // hide the pill — otherwise we get flicker.
   if (e.relatedTarget === pillEl || (pillEl && pillEl.contains && pillEl.contains(e.relatedTarget))) return;
@@ -735,6 +740,9 @@ pillBtnEl.addEventListener("click", (e) => {
 });
 // Keep pill visible while mouse hovers over it (or its info card / button).
 pillEl.addEventListener("pointerleave", (e) => {
+  // Same touch guard as canvasEl's pointerleave — the finger literally
+  // leaves the pill after a tap, and hiding here would race the click.
+  if (e.pointerType === "touch") return;
   // If leaving pill but not going back onto the canvas, hide
   if (e.relatedTarget !== canvasEl && !(pillEl.contains && pillEl.contains(e.relatedTarget))) {
     hoveredSpotId = null;
