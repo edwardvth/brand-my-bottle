@@ -207,9 +207,6 @@ loader.load(MODEL_URL, (gltf) => {
     });
   }
 
-  // Bright chrome / polished-stainless look — light silver base + full metalness
-  // + very low roughness = mirror-like reflections. envMapIntensity boosted so
-  // the RoomEnvironment PMREM reflections are punchy (defaults look muted).
   let hiddenCount = 0;
   const silverMat = new THREE.MeshStandardMaterial({
     color: 0xdcdcdc,
@@ -267,6 +264,19 @@ loader.load(MODEL_URL, (gltf) => {
 
   // Build 12 curved sticker overlays on the body
   buildStickers();
+
+  // GLB is loaded + stickers built — hide the spinner on the next frame
+  // (giving the render loop one tick to paint the real scene first so we
+  // don't fade out onto a blank canvas).
+  const loaderEl = document.getElementById("bottle-loader");
+  if (loaderEl) {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        loaderEl.classList.add("hide");
+        setTimeout(() => loaderEl.classList.add("gone"), 500);
+      });
+    });
+  }
 
   // Frame from union of every VISIBLE mesh under the root, not just
   // keepMeshes — the source model renders extra meshes (the cap!) that

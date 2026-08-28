@@ -4,16 +4,18 @@
 // the resulting bottle-slim.glb is what deploy.ps1 ships.
 import { NodeIO } from "@gltf-transform/core";
 import { KHRONOS_EXTENSIONS } from "@gltf-transform/extensions";
-import { prune, dedup, weld, meshopt, resample } from "@gltf-transform/functions";
+import { prune, dedup, weld, meshopt, resample, flatten } from "@gltf-transform/functions";
 import { MeshoptEncoder } from "meshoptimizer";
 
 const INPUT  = "stainless_steel_water_bottle.glb";
 const OUTPUT = "bottle-slim.glb";
-// Keep only the bottle body subtree. The GLB's "Bottle Cap _3" node has a
-// baked-in transform that scales wildly when the body is non-uniformly
-// resized (see git 09dd4fe screenshot — huge mushroom cap over tiny body).
-// We add our own procedural cap in app.js instead — simpler, always fits.
-const KEEP_NODES = ["Water Bottle_5"];
+// Keep the body subtree AND the real screw-cap. The cap USED to mushroom
+// under non-uniform scale (its parent had baked scale=0.588 which composed
+// with the app's 1.60x width scale to a wild size). This time we run
+// flatten() before writing, which folds every parent transform into the
+// vertex data of each mesh, so scaling the root uniformly by the app just
+// works — no more baked scale composition surprise.
+const KEEP_NODES = ["Water Bottle_5", "Bottle Cap _3"];
 
 const io = new NodeIO().registerExtensions(KHRONOS_EXTENSIONS);
 const doc = await io.read(INPUT);
@@ -58,8 +60,11 @@ for (const mat of root.listMaterials()) {
 // Delete all textures + samplers + images.
 for (const tex of root.listTextures()) tex.dispose();
 
-// 4) Prune orphaned accessors/buffers/etc.
+// 4) Prune orphaned accessors/buffers/etc + FLATTEN so parent transforms
+//    are baked into vertex data (fixes the mushroom-cap regression when
+//    the app applies its own non-uniform width scale).
 await doc.transform(
+  flatten(),        // bake node transforms into geometry — critical for cap
   prune(),
   dedup(),
   weld(),           // merge co-located vertices
