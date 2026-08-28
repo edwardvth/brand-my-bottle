@@ -339,6 +339,12 @@ loader.load(MODEL_URL, (gltf) => {
   bottleMesh = null;
   const bodyRoot = findNodeByName(root, BODY_NODE_NAME);
   const keepMeshes = new Set();
+  // The Water Bottle_5 sub-tree contains the body mesh (tall) and the screw-cap
+  // mesh (short, sits on top). Separately track the cap so we can give it a
+  // DIFFERENT material — otherwise, painting everything with the same silver
+  // makes the cap visually merge into the body (that was the "no cap on real
+  // bottle" bug from image #76: cap is there, but chrome-on-chrome).
+  let capMesh = null;
   if (bodyRoot) {
     bodyRoot.traverse((child) => {
       if (child.isMesh && child.geometry) {
@@ -350,6 +356,11 @@ loader.load(MODEL_URL, (gltf) => {
           bottleMesh = child;
         }
       }
+    });
+    // Anything under Water Bottle_5 that isn't the body IS the cap (in this
+    // GLB there's exactly one such mesh: Object_14).
+    bodyRoot.traverse((child) => {
+      if (child.isMesh && child !== bottleMesh) capMesh = child;
     });
   }
   // Fallback: tallest mesh anywhere
@@ -374,16 +385,28 @@ loader.load(MODEL_URL, (gltf) => {
     roughness: 0.12,
     envMapIntensity: 1.4,
   });
+  // Dark screw-cap — matches the placeholder's cap so the visual doesn't jump
+  // when the real GLB swaps in. Softer highlight than the mirror body, so the
+  // cap reads as a distinct dark ring on top of the bottle.
+  const capMat = new THREE.MeshStandardMaterial({
+    color: 0x1a1a1a,
+    metalness: 0.6,
+    roughness: 0.45,
+    envMapIntensity: 1.0,
+  });
   root.traverse((child) => {
     if (!child.isMesh) return;
     if (!keepMeshes.has(child)) {
       child.visible = false;
       hiddenCount++;
+      return;
     }
+    const isCap = (child === capMesh);
+    const mat = isCap ? capMat : silverMat;
     if (Array.isArray(child.material)) {
-      child.material = child.material.map(() => silverMat);
+      child.material = child.material.map(() => mat);
     } else if (child.material) {
-      child.material = silverMat;
+      child.material = mat;
     }
   });
 
@@ -471,6 +494,7 @@ loader.load(MODEL_URL, (gltf) => {
 
   setDebug(
     `body mesh: ${bottleMesh?.name}\n` +
+    `cap mesh: ${capMesh?.name || "(none)"}\n` +
     `hidden meshes: ${hiddenCount}\n` +
     `radius: ${bodyGeom.radius.toFixed(3)}  height: ${bodyGeom.height.toFixed(3)}\n` +
     `centerY: ${bodyGeom.centerY.toFixed(3)}\n` +
