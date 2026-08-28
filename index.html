@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Twelve stickers, one bottle — Brand My Bottle</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css" />
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body>
+  <header class="site-header">
+    <a href="/" class="wordmark">
+      <svg class="drop" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+        <path d="M12 2C12 2 5 10 5 15a7 7 0 0 0 14 0c0-5-7-13-7-13z" fill="currentColor"/>
+      </svg>
+      <span><em>Brand</em> My Bottle</span>
+    </a>
+    <nav>
+      <a href="#spots">Spots</a>
+      <a href="#faq">FAQ</a>
+      <a href="#stage" class="cta">Bid</a>
+    </nav>
+  </header>
+
+  <main>
+    <!-- HERO — compact so bottle is visible above the fold -->
+    <section id="stage" class="stage">
+      <div class="hero-top">
+        <div class="eyebrow">
+          <span class="live-dot"></span>
+          Live auction · <span id="countdown">—</span> left
+        </div>
+        <h1 class="display">
+          Twelve stickers. <em>One bottle.</em>
+        </h1>
+        <p class="lede">
+          Your logo rides on my water bottle for a year. Tap a dashed square.
+        </p>
+      </div>
+
+      <div class="canvas-wrap">
+        <canvas id="scene"></canvas>
+        <!-- floating Outbid pill, positioned in JS based on hovered sticker -->
+        <button id="hover-pill" class="hover-pill" hidden aria-label="Bid on this spot">
+          <span class="pill-verb" id="pill-verb">Bid</span>
+          <span class="pill-sep">·</span>
+          <span class="pill-price" id="pill-price">$1</span>
+        </button>
+        <p class="hint">drag · scroll to zoom · hover a sticker to bid</p>
+      </div>
+
+      <div class="stat-row">
+        <div class="stat">
+          <div class="stat-num">$<span id="raised-amount">0</span></div>
+          <div class="stat-label">raised</div>
+        </div>
+        <div class="stat divider"></div>
+        <div class="stat">
+          <div class="stat-num"><span id="taken-count">0</span>/12</div>
+          <div class="stat-label">spots claimed</div>
+        </div>
+        <div class="stat divider"></div>
+        <div class="stat">
+          <div class="stat-num" id="high-bid">$0</div>
+          <div class="stat-label">high bid</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Water wave divider -->
+    <svg class="wave-divider" viewBox="0 0 1440 60" preserveAspectRatio="none" aria-hidden="true">
+      <path d="M0,30 C240,50 480,10 720,30 C960,50 1200,10 1440,30 L1440,60 L0,60 Z" fill="var(--sea-tint)"/>
+    </svg>
+
+    <!-- GRID -->
+    <section id="spots" class="grid-section">
+      <div class="section-head">
+        <div class="eyebrow static">All twelve spots</div>
+        <h2 class="section-h2">Pick one. Bid. Win.</h2>
+      </div>
+      <div id="spot-grid" class="spot-grid"></div>
+    </section>
+
+    <!-- FAQ -->
+    <section id="faq" class="grid-section faq-section">
+      <div class="section-head">
+        <div class="eyebrow static">Questions</div>
+        <h2 class="section-h2">The short version.</h2>
+      </div>
+      <div class="faq-list">
+        <details><summary>How long does the sticker stay on?</summary><p>Twelve months from auction close.</p></details>
+        <details><summary>What if I get outbid?</summary><p>Card refunded automatically within 5–10 business days.</p></details>
+        <details><summary>What file do you need?</summary><p>PNG or SVG with a transparent background. I email you a preview before printing.</p></details>
+        <details><summary>Where do you take the bottle?</summary><p>Everywhere. Weekly photos on X.</p></details>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <p><em>Brand</em> My Bottle</p>
+    <p class="footnote">3D model: <a href="https://sketchfab.com/3d-models" target="_blank" rel="noopener">Strebicusy · CC-BY</a></p>
+  </footer>
+
+  <!-- Bid modal — compact, focused on the ask: how much + who -->
+  <div id="bid-modal" class="modal" hidden>
+    <div class="modal-card">
+      <button class="modal-close" id="modal-close" aria-label="Close">×</button>
+      <div class="eyebrow static">Spot <span id="bid-spot-label">—</span></div>
+      <h3 id="bid-modal-title">Bid</h3>
+      <p class="modal-sub">Current <strong>$<span id="bid-current">0</span></strong> · min next <strong>$<span id="bid-min">1</span></strong></p>
+
+      <form id="bid-form">
+        <div class="bid-quick" id="bid-quick"><!-- injected: $1, $2, $5, +$5 --></div>
+        <label class="bid-amount-wrap">
+          <span class="lbl">Your bid</span>
+          <div class="input-with-prefix">
+            <span class="prefix">$</span>
+            <input type="number" name="amount" required min="1" step="1" id="bid-input" />
+          </div>
+        </label>
+        <label>
+          <span class="lbl">Email <span class="lbl-fine">(so we can email you if outbid)</span></span>
+          <input type="email" name="email" required placeholder="you@company.com" />
+        </label>
+        <button type="submit" class="btn-primary" id="bid-submit">Place bid — $<span id="bid-submit-amt">1</span></button>
+        <p class="modal-fine">Preview only. No charge yet.</p>
+      </form>
+    </div>
+  </div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
