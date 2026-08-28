@@ -144,11 +144,24 @@ function setDebug(text, opts = {}) {
 // Resize
 function resize() {
   const rect = canvasEl.getBoundingClientRect();
+  // Guard: if the canvas hasn't laid out yet (0×0), don't push a dead
+  // framebuffer to WebGL — a subsequent ResizeObserver tick will catch us up
+  // once layout completes. Without this guard the very first frame would set
+  // renderer to 0×0 and camera.aspect to NaN.
+  if (!rect.width || !rect.height) return;
   renderer.setSize(rect.width, rect.height, false);
   camera.aspect = rect.width / rect.height;
   camera.updateProjectionMatrix();
 }
 window.addEventListener("resize", resize);
+// A canvas inside a flexbox column can size independently of the window (image
+// loads shove things around, fonts swap in, etc.) — window "resize" alone is
+// not enough. ResizeObserver fires whenever the canvas element itself changes
+// dimensions, so we always end up with a live framebuffer.
+if (typeof ResizeObserver !== "undefined") {
+  const ro = new ResizeObserver(() => resize());
+  ro.observe(canvasEl);
+}
 
 // ---------- Load model ----------
 let bottleMesh = null;
@@ -222,7 +235,10 @@ function mountPlaceholder() {
   const totalH = PLACEHOLDER_HEIGHT + capH + shoulderH;
   const dH = (totalH / 2) / Math.tan(fovRad / 2);
   const dW = (PLACEHOLDER_RADIUS)     / Math.tan(fovRad / 2) / aspect;
-  const distance = Math.max(dH, dW) * 1.15;
+  let distance = Math.max(dH, dW) * 1.15;
+  // NaN guard — if aspect / tan produced anything degenerate we still want a
+  // usable camera. 1.5 is a sane default at the placeholder's scale.
+  if (!Number.isFinite(distance) || distance <= 0) distance = 1.5;
   const startTheta = SPOT_CONFIG[0].theta;
   camera.position.set(
     distance * Math.cos(startTheta),
@@ -233,6 +249,12 @@ function mountPlaceholder() {
   controls.minDistance = distance * 0.45;
   controls.maxDistance = distance * 1.9;
   controls.update();
+
+  // Make sure world matrices are up-to-date BEFORE buildStickers runs its
+  // raycasts against bottleMesh — otherwise localRadiusAt hits the mesh at
+  // its identity transform (or misses entirely) and stickers can be built
+  // with a wrong radius on the first frame.
+  placeholderGroup.updateMatrixWorld(true);
 
   buildStickers();
   resize();
@@ -254,8 +276,12 @@ function unmountPlaceholder() {
   }
 }
 
-// Kick placeholder in immediately so the canvas is never blank.
-mountPlaceholder();
+// Kick placeholder in on the next frame — deferring by one rAF guarantees the
+// browser has laid the canvas out at least once, so canvasEl.getBoundingClientRect()
+// returns real dimensions instead of 0×0. If we mount synchronously at module
+// load, resize() inside mountPlaceholder gets called with 0×0 and the very
+// first WebGL framebuffer is dead until the user resizes the window.
+requestAnimationFrame(() => mountPlaceholder());
 
 const loader = new GLTFLoader();
 loader.load(MODEL_URL, (gltf) => {
