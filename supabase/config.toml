@@ -1,0 +1,18 @@
+# Supabase config for Brand My Bottle.
+# Only Edge Functions live here — the DB schema is applied via the Management
+# API (see supabase-schema.sql / supabase-schema-v2.sql).
+
+project_id = "kmzjbyndzgaxkrdbrdof"
+
+# Stripe posts to this endpoint with only its own `stripe-signature` header —
+# it will never carry a Supabase JWT. Signature verification happens INSIDE
+# the function, so JWT-gating this endpoint would just 401 every Stripe
+# retry.
+[functions.bmb-stripe-webhook]
+verify_jwt = false
+
+# The create-checkout endpoint is called from the browser with the anon
+# key. JWT verification is fine there — it lets Supabase's edge proxy strip
+# obvious junk before our code runs.
+[functions.bmb-create-checkout]
+verify_jwt = true

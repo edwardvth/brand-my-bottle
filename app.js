@@ -1046,3 +1046,54 @@ resize();
 syncFromSupabase();
 // Poll every 20s for competing bids
 setInterval(syncFromSupabase, 20 * 1000);
+
+// ---------- Stripe return-from-Checkout toast ----------
+// Kept at the very bottom of the file to minimise conflict area with the 3D
+// scene code above. When Stripe redirects the user back to the site the URL
+// carries ?bid=success or ?bid=cancel. On success we show a small toast and
+// force a fresh pull from Supabase — the webhook may still be in flight, so
+// we retry a few times.
+(function handleCheckoutReturn() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const outcome = params.get("bid");
+    if (outcome !== "success" && outcome !== "cancel") return;
+
+    // Strip the query param so a refresh doesn't re-toast.
+    const cleanUrl = window.location.pathname + window.location.hash;
+    window.history.replaceState({}, "", cleanUrl);
+
+    const toast = document.createElement("div");
+    toast.style.cssText =
+      "position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:10000;" +
+      "background:#0e0e0e;color:#f5f1ea;padding:12px 18px;border-radius:999px;" +
+      "font:500 14px/1.3 Inter,-apple-system,sans-serif;" +
+      "box-shadow:0 12px 28px rgba(0,0,0,0.25);max-width:88vw;text-align:center;" +
+      "transition:opacity .4s ease,transform .4s ease;opacity:0;";
+    toast.textContent = outcome === "success"
+      ? "Deposit captured. Refreshing the board…"
+      : "Payment cancelled — nothing was charged.";
+    document.body.appendChild(toast);
+    requestAnimationFrame(() => { toast.style.opacity = "1"; });
+
+    if (outcome === "success") {
+      // Webhook usually lands within a second; give it a few tries before
+      // giving up. syncFromSupabase() rebuilds the stickers + grid + totals.
+      let tries = 0;
+      const poll = () => {
+        if (typeof syncFromSupabase === "function") syncFromSupabase();
+        tries += 1;
+        if (tries < 6) setTimeout(poll, 1500);
+      };
+      poll();
+    }
+
+    setTimeout(() => {
+      toast.style.opacity = "0";
+      toast.style.transform = "translateX(-50%) translateY(8px)";
+      setTimeout(() => toast.remove(), 500);
+    }, 4500);
+  } catch (err) {
+    console.warn("[bmb] checkout-return toast failed:", err);
+  }
+})();
