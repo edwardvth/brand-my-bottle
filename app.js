@@ -42,14 +42,14 @@ const SPOT_CONFIG = [
   // Front die-5 top row + side stickers
   { id: 3,  y: -0.05, theta:  _DIE_R,          wMul: 1.10, hMul: 1.35 }, // die TL (top-right of view), moved further right, taller
   { id: 4,  y: -0.05, theta:  _TAU3,           wMul: 2.00, hMul: 2.00 }, // QUAD right side (upper)
-  { id: 5,  y: -0.05, theta: -_TAU3,           wMul: 1.60, hMul: 2.80 }, // TALL vertical left (wider)
+  { id: 5,  y:  0.10, theta: -_TAU3,           wMul: 1.60, hMul: 2.50 }, // TALL vertical left — centered in the UPPER half (between top banner row and equator)
   { id: 6,  y: -0.05, theta:  _DIE_L,          wMul: 1.10, hMul: 1.35 }, // die TR (top-left of view), taller
   // Front die-5 CENTER
   { id: 7,  y: -0.45, theta:  0,               wMul: 1.30, hMul: 1.30 }, // die CENTER
   // Front die-5 bottom row + side stickers
   { id: 8,  y: -0.85, theta:  _DIE_R,          wMul: 1.10, hMul: 1.35 }, // die BL, moved further right, taller
   { id: 9,  y: -0.85, theta:  _DIE_L,          wMul: 1.10, hMul: 1.35 }, // die BR, taller
-  { id: 10, y: -0.85, theta: -_TAU3,           wMul: 1.60, hMul: 2.80 }, // TALL vertical left (wider)
+  { id: 10, y: -0.70, theta: -_TAU3,           wMul: 1.60, hMul: 2.50 }, // TALL vertical left — centered in the LOWER half; stops before the bottom taper
   { id: 11, y: -0.85, theta:  _TAU3,           wMul: 2.00, hMul: 2.00 }, // QUAD right side (lower) — the spot beneath spot 4
 ];
 const TOTAL = SPOT_CONFIG.length;
@@ -393,13 +393,11 @@ function makeStickerTexture(spotId, price, taken, geomAspect = 1.35, opts = {}) 
   function draw() {
     ctx.clearRect(0, 0, c.width, c.height);
     const pad = Math.round(Math.min(c.width, c.height) * 0.07);
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
 
-    if (taken) {
-      // Paper card background
-      ctx.fillStyle = paper;
-      ctx.fillRect(pad, pad, c.width - pad * 2, c.height - pad * 2);
-    } else {
-      // Dashed empty state
+    if (!taken) {
+      // Empty state: dashed cream frame + SPOT NN + $price
       ctx.fillStyle = "rgba(245,241,234,0.18)";
       ctx.fillRect(pad, pad, c.width - pad * 2, c.height - pad * 2);
       ctx.strokeStyle = paper;
@@ -407,13 +405,7 @@ function makeStickerTexture(spotId, price, taken, geomAspect = 1.35, opts = {}) 
       ctx.setLineDash([30, 18]);
       ctx.strokeRect(pad + 4, pad + 4, c.width - pad * 2 - 8, c.height - pad * 2 - 8);
       ctx.setLineDash([]);
-    }
 
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-
-    if (!taken) {
-      // Empty state: SPOT NN + $price stacked
       const labelSize = Math.round(c.height * 0.12);
       const priceSize = Math.round(c.height * 0.42);
       ctx.font = `bold ${labelSize}px Inter, -apple-system, sans-serif`;
@@ -425,49 +417,54 @@ function makeStickerTexture(spotId, price, taken, geomAspect = 1.35, opts = {}) 
       return;
     }
 
-    // TAKEN state — Mac-app tile: logo on top, brand name, $price beneath.
-    const inner = { x: pad, y: pad, w: c.width - pad * 2, h: c.height - pad * 2 };
-    // 55% of card height for the logo, 45% for text stack
-    const logoH = Math.round(inner.h * 0.55);
-    const textTop = inner.y + logoH + Math.round(inner.h * 0.02);
-    const brandSize = Math.round(inner.h * 0.14);
-    const priceSize = Math.round(inner.h * 0.20);
+    // TAKEN state — App-Store-tile look:
+    //   - Big logo on a paper-cream card at the TOP (~62% of sticker height).
+    //     The paper card exists so transparent-PNG artwork still reads —
+    //     everything OUTSIDE the card is transparent so the bottle shows.
+    //   - Brand name in bold paper-cream sits DIRECTLY on the bottle (same
+    //     color language as the empty stickers).
+    //   - Smaller "Outbid · $N" line beneath, same cream color.
 
-    // Logo
+    const inner  = { x: pad, y: pad, w: c.width - pad * 2, h: c.height - pad * 2 };
+    const cardH  = Math.round(inner.h * 0.62);
+    const brandSize   = Math.round(inner.h * 0.16);
+    const outbidSize  = Math.round(inner.h * 0.11);
+    const gapTextTop  = Math.round(inner.h * 0.05);
+    const brandY      = inner.y + cardH + gapTextTop + brandSize * 0.55;
+    const outbidY     = brandY + brandSize * 0.60 + outbidSize * 0.8;
+
+    // Paper card behind logo (catches transparent-PNG artwork)
+    ctx.fillStyle = paper;
+    ctx.fillRect(inner.x, inner.y, inner.w, cardH);
+
+    // Logo, contained within the paper card with a small inset
+    const cardInset = Math.round(inner.h * 0.05);
+    const boxW = inner.w  - cardInset * 2;
+    const boxH = cardH    - cardInset * 2;
     if (logoImg && logoImg.complete && logoImg.naturalWidth > 0) {
       const iw = logoImg.naturalWidth, ih = logoImg.naturalHeight;
-      const boxW = inner.w - Math.round(inner.h * 0.14);
-      const boxH = logoH - Math.round(inner.h * 0.06);
       const scale = Math.min(boxW / iw, boxH / ih);
       const dw = iw * scale, dh = ih * scale;
       const dx = inner.x + (inner.w - dw) / 2;
-      const dy = inner.y + Math.round(inner.h * 0.05) + (boxH - dh) / 2;
+      const dy = inner.y + cardInset + (boxH - dh) / 2;
       ctx.drawImage(logoImg, dx, dy, dw, dh);
-    } else {
-      // Placeholder square while the image loads (or if no logo uploaded)
-      const boxW = Math.round(inner.h * 0.42);
-      const boxH = boxW;
-      const dx = inner.x + (inner.w - boxW) / 2;
-      const dy = inner.y + Math.round(inner.h * 0.08);
-      ctx.fillStyle = "rgba(14,14,14,0.08)";
-      ctx.fillRect(dx, dy, boxW, boxH);
-      if (brand) {
-        ctx.fillStyle = "rgba(14,14,14,0.55)";
-        ctx.font = `bold ${Math.round(boxH * 0.55)}px Inter, sans-serif`;
-        ctx.fillText(brand.slice(0, 1).toUpperCase(), dx + boxW / 2, dy + boxH / 2);
-      }
+    } else if (brand) {
+      // Placeholder: giant first letter of brand while image loads / if none
+      ctx.fillStyle = "rgba(14,14,14,0.55)";
+      ctx.font = `bold ${Math.round(boxH * 0.65)}px Inter, sans-serif`;
+      ctx.fillText(brand.slice(0, 1).toUpperCase(), inner.x + inner.w / 2, inner.y + cardInset + boxH / 2);
     }
 
-    // Brand name
-    ctx.fillStyle = ink;
-    ctx.font = `600 ${brandSize}px Inter, -apple-system, sans-serif`;
-    const brandTxt = (brand || `Spot ${spotId}`).slice(0, 24);
-    ctx.fillText(brandTxt, c.width / 2, textTop + brandSize * 0.6);
+    // Brand name — cream text on transparent bg (over the bottle)
+    ctx.fillStyle = paper;
+    ctx.font = `700 ${brandSize}px Inter, -apple-system, sans-serif`;
+    const brandTxt = (brand || `Spot ${spotId}`).slice(0, 28);
+    ctx.fillText(brandTxt, inner.x + inner.w / 2, brandY);
 
-    // Price
-    ctx.fillStyle = ink;
-    ctx.font = `bold ${priceSize}px Georgia, "Times New Roman", serif`;
-    ctx.fillText(`$${price.toLocaleString()}`, c.width / 2, textTop + brandSize * 1.6 + priceSize * 0.4);
+    // Outbid line — smaller cream text on transparent bg
+    ctx.fillStyle = paper;
+    ctx.font = `500 ${outbidSize}px Inter, -apple-system, sans-serif`;
+    ctx.fillText(`Outbid · $${(price + 1).toLocaleString()}`, inner.x + inner.w / 2, outbidY);
   }
 
   draw();

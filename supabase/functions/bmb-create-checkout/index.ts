@@ -52,8 +52,8 @@ Deno.serve(async (req) => {
   const x_handle = body.x_handle?.toString().trim() || null;
   const logo_url = body.logo_url?.toString().trim() || null;
 
-  if (!Number.isInteger(spot_id) || spot_id < 1 || spot_id > 10) {
-    return json({ error: "spot_id must be 1..10" }, 400);
+  if (!Number.isInteger(spot_id) || spot_id < 1 || spot_id > 11) {
+    return json({ error: "spot_id must be 1..11" }, 400);
   }
   if (!Number.isInteger(amount_cents) || amount_cents < 100) {
     return json({ error: "amount_cents must be an integer >= 100" }, 400);
@@ -104,8 +104,11 @@ Deno.serve(async (req) => {
             currency: "usd",
             unit_amount: deposit_cents,
             product_data: {
-              name: `Brand My Bottle · Spot ${spot_id} deposit`,
-              description: `20% refundable deposit on a $${bid_dollars} bid. Refunded in full if you don't win; the remaining 80% is charged to the same card when the auction closes.`,
+              name: `Brand My Bottle — Spot ${spot_id}`,
+              description:
+                `Holds your $${bid_dollars} bid on Spot ${spot_id}. ` +
+                `If you're outbid, this deposit is refunded to your card automatically. ` +
+                `If you win, the remaining balance is charged when the auction closes.`,
             },
           },
         },
