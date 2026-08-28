@@ -17,7 +17,10 @@ $PublicFiles = @(
     "app.js",
     "styles.css",
     "stainless_steel_water_bottle.glb",
-    "bmb-logo.png"
+    "bmb-logo.png",
+    "og-card.png",
+    "favicon-32.png",
+    "apple-touch-icon.png"
 )
 
 Write-Output "Rebuilding dist/..."

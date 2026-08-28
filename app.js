@@ -654,8 +654,14 @@ function raycastSticker(clientX, clientY) {
   return null;
 }
 
+// When a touch pointerup handles an occupied-sticker tap by showing the pill,
+// the browser still fires a synthetic click ~50ms later. Set this flag from
+// the touch handler so the click handler below skips its would-be openBidModal.
+let _suppressNextStickerClick = false;
+
 canvasEl.addEventListener("click", (e) => {
   if (didDrag) return;
+  if (_suppressNextStickerClick) { _suppressNextStickerClick = false; return; }
   const hit = raycastSticker(e.clientX, e.clientY);
   if (hit) openBidModal(hit.userData.spotId);
 });
@@ -675,6 +681,9 @@ canvasEl.addEventListener("pointerup", (e) => {
   // taps Outbid to open the bid modal. For OPEN stickers, jump straight
   // to the bid modal (nothing to preview).
   if (spot) {
+    // Suppress the synthetic click that follows this touch so the older
+    // click handler doesn't also open the bid modal on top of our pill.
+    _suppressNextStickerClick = true;
     hoveredSpotId = spotId;
     const price = spot.amount;
     pillVerbEl.textContent  = "Outbid";
