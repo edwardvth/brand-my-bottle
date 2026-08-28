@@ -255,9 +255,16 @@ loader.load(MODEL_URL, (gltf) => {
   // Build 12 curved sticker overlays on the body
   buildStickers();
 
-  // Frame from UNION bbox (body + cap) so the cap fits in view too
+  // Frame from union of every VISIBLE mesh under the root, not just
+  // keepMeshes — the source model renders extra meshes (the cap!) that
+  // aren't in the sticker-body sub-tree. Framing on keepMeshes alone
+  // cut off the bottom of the bottle once we tightened the multiplier.
   const framingBox = new THREE.Box3();
-  keepMeshes.forEach(m => framingBox.expandByObject(m));
+  root.traverse((child) => {
+    if (child.isMesh && child.visible !== false && child.geometry) {
+      framingBox.expandByObject(child);
+    }
+  });
   const fSize = framingBox.getSize(new THREE.Vector3());
   const fCenter = framingBox.getCenter(new THREE.Vector3());
   const fovRad = camera.fov * Math.PI / 180;
@@ -265,7 +272,7 @@ loader.load(MODEL_URL, (gltf) => {
   const aspect = Math.max(0.4, (rect.width || 1) / (rect.height || 1));
   const distForHeight = (fSize.y / 2) / Math.tan(fovRad / 2);
   const distForWidth  = (Math.max(fSize.x, fSize.z) / 2) / Math.tan(fovRad / 2) / aspect;
-  const distance = Math.max(distForHeight, distForWidth) * 0.95;   // tighter zoom — bottle fills more of the frame
+  const distance = Math.max(distForHeight, distForWidth) * 1.08;   // small headroom so the cap + bottom don't kiss the edge
   // Start camera on spot #1's axis so the spin naturally reveals #1 first.
   const startTheta = SPOT_CONFIG[0].theta;
   camera.position.set(
