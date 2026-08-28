@@ -233,26 +233,45 @@
       <p class="money-answer">A new water bottle.</p>
     </section>
 
-    <!-- WORLDWIDE STATS -->
+    <!-- LIVE STATS PANEL -->
     <section id="stats" class="grid-section stats-section">
       <div class="section-head">
         <div class="eyebrow static">The board</div>
-        <h2 class="section-h2">Where in the world.</h2>
-        <p class="stats-sub">Live traffic to iwantabottle.com. Refreshes on scroll.</p>
+        <h2 class="section-h2">Live from the internet.</h2>
+        <p class="stats-sub">Real numbers, updated as they change.</p>
       </div>
-      <!-- Lazy-mounted on scroll-in via IntersectionObserver in app.js. -->
-      <div id="stats-embed" class="stats-embed" data-src="https://datafa.st/share/iwantabottle.com">
-        <div class="stats-placeholder" aria-hidden="true">
-          <div class="stats-globe">
-            <svg viewBox="0 0 100 100" width="80" height="80" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
-              <circle cx="50" cy="50" r="42"/>
-              <ellipse cx="50" cy="50" rx="42" ry="16"/>
-              <ellipse cx="50" cy="50" rx="16" ry="42"/>
-              <path d="M12 42 Q50 26 88 42"/>
-              <path d="M12 58 Q50 74 88 58"/>
-            </svg>
+      <!-- Refreshed on scroll-in via IntersectionObserver in app.js -->
+      <div id="stats-panel" class="stats-panel">
+        <div class="stats-globe-bg" aria-hidden="true">
+          <svg viewBox="0 0 100 100" width="360" height="360" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round">
+            <circle cx="50" cy="50" r="46"/>
+            <ellipse cx="50" cy="50" rx="46" ry="18"/>
+            <ellipse cx="50" cy="50" rx="18" ry="46"/>
+            <ellipse cx="50" cy="50" rx="36" ry="46"/>
+            <path d="M4 40 Q50 26 96 40"/>
+            <path d="M4 60 Q50 76 96 60"/>
+          </svg>
+        </div>
+        <div class="stats-grid">
+          <div class="stat-tile">
+            <div class="stat-tile-num" id="stats-visiting-now">—</div>
+            <div class="stat-tile-lbl">visiting right now</div>
           </div>
-          <p class="stats-hint">Scroll here to load the map</p>
+          <div class="stat-tile">
+            <div class="stat-tile-num" id="stats-total-visitors">—</div>
+            <div class="stat-tile-lbl">visitors so far</div>
+          </div>
+          <div class="stat-tile">
+            <div class="stat-tile-num" id="stats-raised">$0</div>
+            <div class="stat-tile-lbl">raised toward the $50 goal</div>
+          </div>
+          <div class="stat-tile">
+            <div class="stat-tile-num" id="stats-bids">0</div>
+            <div class="stat-tile-lbl">bids placed all-time</div>
+          </div>
+        </div>
+        <div class="stats-foot">
+          Detailed breakdown by country + referrer lives on my DataFast dashboard.
         </div>
       </div>
     </section>

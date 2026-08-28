@@ -1531,35 +1531,76 @@ syncFromSupabase();
 // Poll every 20s for competing bids
 setInterval(syncFromSupabase, 20 * 1000);
 
-// ---------- DataFast map: lazy-mount the embed on scroll-in ----------
-// The <div id="stats-embed"> at the bottom of the page holds the iframe URL
-// in data-src. We only inject the iframe when the section actually scrolls
-// into view — no extra network request on initial page load, no rendering
-// cost until the user asks for it.
-(function initStatsLazyMount() {
-  const el = document.getElementById("stats-embed");
+// ---------- Live stats panel: refreshed only when scrolled into view ----------
+// Panel at #stats-panel shows visiting-now / total-visitors / raised /
+// bid-count. Data comes from bmb_stats (via bmb-beat) and bmb_bids.
+// IntersectionObserver triggers a refresh every time the panel enters the
+// viewport (with a 30s minimum between refreshes so we don't hammer
+// Supabase). Nothing loads on initial page render — the bottle GLB gets
+// its bandwidth uncontested.
+(function initStatsPanel() {
+  const el = document.getElementById("stats-panel");
   if (!el) return;
-  const src = el.dataset.src;
-  if (!src) return;
-  let mounted = false;
-  function mount() {
-    if (mounted) return;
-    mounted = true;
-    const frame = document.createElement("iframe");
-    frame.src = src;
-    frame.loading = "lazy";
-    frame.referrerPolicy = "no-referrer-when-downgrade";
-    frame.title = "Worldwide traffic to iwantabottle.com";
-    frame.setAttribute("allow", "fullscreen");
-    el.appendChild(frame);
-    el.classList.add("mounted");
+  const $ = (id) => document.getElementById(id);
+  const nowEl   = $("stats-visiting-now");
+  const totEl   = $("stats-total-visitors");
+  const raiseEl = $("stats-raised");
+  const bidsEl  = $("stats-bids");
+  let lastRefresh = 0;
+  const MIN_MS = 30_000;
+
+  function flashTiles() {
+    el.querySelectorAll(".stat-tile").forEach((t) => {
+      t.classList.add("refreshing");
+      setTimeout(() => t.classList.remove("refreshing"), 260);
+    });
   }
-  if (!("IntersectionObserver" in window)) { mount(); return; }
+
+  async function refresh() {
+    const now = Date.now();
+    if (now - lastRefresh < MIN_MS) return;
+    lastRefresh = now;
+    flashTiles();
+    try {
+      // Visiting now + total visitors — one round trip to bmb-beat with our
+      // existing token (same call the top-of-page pill uses).
+      const token = localStorage.getItem("bmb_visitor_token");
+      if (token) {
+        const r = await fetch(`${SUPABASE_URL}/functions/v1/bmb-beat`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ token }),
+        });
+        const d = await r.json();
+        if (typeof d.visiting_now  === "number") nowEl.textContent = d.visiting_now.toLocaleString();
+        if (typeof d.total_visitors === "number") totEl.textContent = d.total_visitors.toLocaleString();
+      }
+    } catch (_) { /* offline — keep prior values */ }
+    try {
+      // Total bids + raised amount — pull from bmb_bid_history (no email).
+      const { data, error } = await sb.from("bmb_bid_history").select("amount_cents");
+      if (!error && Array.isArray(data)) {
+        const bidCount = data.length;
+        const raised = data.reduce((sum, r) => sum + (r.amount_cents || 0), 0);
+        // For the "raised" tile we prefer the TOP bid per spot (matches the
+        // topbar money bar). bmb_current_bids is a smaller query.
+        const { data: cur } = await sb.from("bmb_current_bids").select("amount_cents");
+        const topSum = Array.isArray(cur) ? cur.reduce((s, r) => s + (r.amount_cents || 0), 0) : raised;
+        raiseEl.textContent = `$${Math.round(topSum / 100).toLocaleString()}`;
+        bidsEl.textContent = bidCount.toLocaleString();
+      }
+    } catch (_) { /* keep prior values */ }
+  }
+
+  if (!("IntersectionObserver" in window)) { refresh(); return; }
   const io = new IntersectionObserver((entries) => {
     for (const entry of entries) {
-      if (entry.isIntersecting) { mount(); io.disconnect(); break; }
+      if (entry.isIntersecting) refresh();
     }
-  }, { rootMargin: "200px 0px" });   // start loading 200px before it hits the viewport
+  }, { rootMargin: "160px 0px" });
   io.observe(el);
 })();
 
