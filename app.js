@@ -295,21 +295,15 @@ loader.load(MODEL_URL, (gltf) => {
   const aspect = Math.max(0.4, (rect.width || 1) / (rect.height || 1));
   const distForHeight = (fSize.y / 2) / Math.tan(fovRad / 2);
   const distForWidth  = (Math.max(fSize.x, fSize.z) / 2) / Math.tan(fovRad / 2) / aspect;
-  // Both viewports are locked to owner-tuned coords from the dev panel
-  // (2026-08-28). Anything not tuned falls back to auto-frame.
+  // Both viewports load with the camera on the bottle's FRONT axis (+X) at the
+  // owner-tuned distance from 2026-08-28. This orientation shows the front
+  // die stickers head-on while side spots 4/11 (right) and 5/10 (left) wrap
+  // in half-visible at the silhouette edges.
   const isMobile = rect.width < 640;
-  let distance;
-  if (!isMobile) {
-    // DESKTOP
-    camera.position.set(0.955, -0.082, 1.329);
-    controls.target.set(0, -0.082, 0);
-    distance = 1.637;
-  } else {
-    // MOBILE
-    camera.position.set(0.737, -0.041, 1.283);
-    controls.target.set(0, -0.041, 0);
-    distance = 1.480;
-  }
+  const distance = isMobile ? 1.480 : 1.637;
+  const targetY  = isMobile ? -0.041 : -0.082;
+  camera.position.set(distance, targetY, 0);   // on +X axis = dead-front view
+  controls.target.set(0, targetY, 0);
   controls.minDistance = distance * 0.45;
   controls.maxDistance = distance * 1.9;
   controls.update();
