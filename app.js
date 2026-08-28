@@ -283,7 +283,7 @@ function mountPlaceholder() {
   // Bottom disc so stickers on the back don't peek through the underside
   bottomCap = new THREE.Mesh(
     new THREE.CircleGeometry(TARGET_BODY_RADIUS, 48),
-    mat
+    silverMat
   );
   bottomCap.rotation.x = Math.PI / 2;
   bottomCap.position.y = TARGET_BODY_CENTERY - TARGET_BODY_HEIGHT / 2;
