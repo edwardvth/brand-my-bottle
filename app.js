@@ -666,10 +666,33 @@ canvasEl.addEventListener("pointerup", (e) => {
   if (e.pointerType !== "touch") return;
   if (didDrag) return;
   const hit = raycastSticker(e.clientX, e.clientY);
-  if (hit) {
-    e.preventDefault();
-    openBidModal(hit.userData.spotId);
+  if (!hit) return;
+  e.preventDefault();
+  const spotId = hit.userData.spotId;
+  const spot   = state.spots[spotId];
+  // For OCCUPIED stickers, first tap shows the info pill (brand + website
+  // + X handle + Outbid button) — same info a desktop hover shows. User
+  // taps Outbid to open the bid modal. For OPEN stickers, jump straight
+  // to the bid modal (nothing to preview).
+  if (spot) {
+    hoveredSpotId = spotId;
+    const price = spot.amount;
+    pillVerbEl.textContent  = "Outbid";
+    pillPriceEl.textContent = `$${(price + MIN_INCREMENT).toLocaleString()}`;
+    fillPillInfo(spot);
+    positionPillAt(hit);
+    pillEl.hidden = false;
+  } else {
+    openBidModal(spotId);
   }
+});
+// Dismiss the pill when the user taps outside the canvas or the pill.
+document.addEventListener("pointerdown", (e) => {
+  if (!pillEl || pillEl.hidden) return;
+  if (canvasEl.contains(e.target)) return;
+  if (pillEl.contains(e.target))   return;
+  hoveredSpotId = null;
+  pillEl.hidden = true;
 });
 
 // Hover → move & show the Outbid pill at the hovered sticker's screen position
@@ -1524,6 +1547,12 @@ setInterval(syncFromSupabase, 20 * 1000);
 // carries ?bid=success or ?bid=cancel. On success we show a small toast and
 // force a fresh pull from Supabase — the webhook may still be in flight, so
 // we retry a few times.
+// Canonical site URL used in tweet text, native share, and copy-link. Kept
+// at the top of this IIFE so all references are one place. Custom domain
+// launched 2026-08-28.
+const SITE_URL = "https://iwantabottle.com";
+const SITE_URL_PRETTY = "iwantabottle.com";
+
 (function handleCheckoutReturn() {
   try {
     const params = new URLSearchParams(window.location.search);
@@ -1645,7 +1674,7 @@ setInterval(syncFromSupabase, 20 * 1000);
         linkEl.innerHTML = `<a href="${escapeAttrSafe(href)}" target="_blank" rel="noopener noreferrer">${escapeHtmlSafe(pretty)}</a>`;
       } else {
         linkLabel.textContent = "Bottle";
-        linkEl.textContent = "brand-my-bottle.pages.dev";
+        linkEl.innerHTML = `<a href="${SITE_URL}" target="_blank" rel="noopener noreferrer">${SITE_URL_PRETTY}</a>`;
       }
     }
 
@@ -1665,23 +1694,67 @@ setInterval(syncFromSupabase, 20 * 1000);
       }
     }
 
-    // X-intent URL
+    // X-intent URL + stash the current text on the modal so Copy / Share
+    // can reuse the exact same paragraph without re-computing.
     const xBtn = $("share-x");
+    const tweet = buildTweet({ brand, spotId, amount });
     if (xBtn) {
-      const tweet = buildTweet({ brand, spotId, amount });
       xBtn.href = "https://x.com/intent/tweet?text=" + encodeURIComponent(tweet);
+    }
+    const modalEl = document.getElementById("share-modal");
+    if (modalEl) {
+      modalEl.dataset.shareText = tweet;
+      modalEl.dataset.shareLogo = logo || "";
     }
   }
 
   function buildTweet({ brand, spotId, amount }) {
-    const url = "https://brand-my-bottle.pages.dev";
     if (spotId && amount != null) {
-      return `Just claimed sticker spot #${spotId} on the Brand My Bottle water bottle for $${amount}. My logo rides for a year. ${url}`;
+      return `Just claimed sticker spot #${spotId} on the Brand My Bottle water bottle for $${amount}. My logo rides as long as the bottle lasts. ${SITE_URL}`;
     }
     if (spotId) {
-      return `Just claimed sticker spot #${spotId} on the Brand My Bottle water bottle. My logo rides for a year. ${url}`;
+      return `Just claimed sticker spot #${spotId} on the Brand My Bottle water bottle. My logo rides as long as the bottle lasts. ${SITE_URL}`;
     }
-    return `Just claimed a sticker spot on the Brand My Bottle water bottle. My logo rides for a year. ${url}`;
+    return `Just claimed a sticker spot on the Brand My Bottle water bottle. My logo rides as long as the bottle lasts. ${SITE_URL}`;
+  }
+
+  // ---- Share helpers: fetch the logo as a File so Share/Copy can include it ----
+  async function fetchLogoFile(url) {
+    if (!url) return null;
+    try {
+      const res = await fetch(url, { mode: "cors" });
+      if (!res.ok) return null;
+      const blob = await res.blob();
+      const ext  = (blob.type.split("/")[1] || "png").split("+")[0];
+      return new File([blob], `bmb-sticker.${ext}`, { type: blob.type || "image/png" });
+    } catch (_) { return null; }
+  }
+  async function copyRichClipboard(text, logoUrl) {
+    // Prefer navigator.clipboard.write() with a ClipboardItem containing BOTH
+    // the paragraph and the logo image so a paste anywhere gets both. Fallback
+    // to plain text if the ClipboardItem API isn't available (Firefox, Safari<15).
+    try {
+      if (typeof ClipboardItem === "function" && logoUrl) {
+        const file = await fetchLogoFile(logoUrl);
+        if (file && file.type.startsWith("image/")) {
+          const item = new ClipboardItem({
+            [file.type]: file,
+            "text/plain": new Blob([text], { type: "text/plain" }),
+          });
+          await navigator.clipboard.write([item]);
+          return true;
+        }
+      }
+    } catch (_) { /* fall through to text-only */ }
+    try { await navigator.clipboard.writeText(text); return true; } catch (_) {}
+    // Legacy execCommand fallback
+    try {
+      const t = document.createElement("textarea");
+      t.value = text; document.body.appendChild(t); t.select();
+      document.execCommand("copy");
+      t.remove();
+      return true;
+    } catch (_) { return false; }
   }
 
   function openShareModal() {
@@ -1713,7 +1786,9 @@ setInterval(syncFromSupabase, 20 * 1000);
       modal._bmbEscBound = true;
     }
 
-    // Native share (mobile) — hide if unsupported
+    // Native share (mobile) — hide if unsupported. Attaches the logo image
+    // as a File so the recipient app (Messages, Instagram DM, etc) can post
+    // the paragraph WITH the sticker artwork, not just a plain URL.
     const nativeBtn = document.getElementById("share-native");
     const actionsRow = document.getElementById("share-actions");
     if (nativeBtn) {
@@ -1722,15 +1797,18 @@ setInterval(syncFromSupabase, 20 * 1000);
         if (actionsRow) actionsRow.setAttribute("data-has-native", "1");
         if (!nativeBtn._bmbBound) {
           nativeBtn.addEventListener("click", async () => {
-            const xBtn = document.getElementById("share-x");
-            const text = xBtn ? decodeURIComponent(xBtn.href.split("text=")[1] || "") : "";
-            try {
-              await navigator.share({
-                title: "Brand My Bottle",
-                text: text || "I just claimed a sticker spot on the Brand My Bottle water bottle.",
-                url: "https://brand-my-bottle.pages.dev",
-              });
-            } catch (_) { /* user cancelled */ }
+            const text = modal.dataset.shareText
+              || "I just claimed a sticker spot on the Brand My Bottle water bottle.";
+            const logoUrl = modal.dataset.shareLogo || "";
+            let payload = { title: "Brand My Bottle", text, url: SITE_URL };
+            if (logoUrl) {
+              const file = await fetchLogoFile(logoUrl);
+              if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
+                payload = { title: "Brand My Bottle", text, files: [file] };
+              }
+            }
+            try { await navigator.share(payload); }
+            catch (_) { /* user cancelled */ }
           });
           nativeBtn._bmbBound = true;
         }
@@ -1740,21 +1818,15 @@ setInterval(syncFromSupabase, 20 * 1000);
       }
     }
 
-    // Copy link
+    // Copy link → copies the FULL paragraph and (when supported) the logo
+    // image, so a paste anywhere lands both. Falls back to text-only.
     const copyBtn = document.getElementById("share-copy");
     const copyLabel = document.getElementById("share-copy-label");
     if (copyBtn && !copyBtn._bmbBound) {
       copyBtn.addEventListener("click", async () => {
-        const url = "https://brand-my-bottle.pages.dev";
-        try {
-          await navigator.clipboard.writeText(url);
-        } catch (_) {
-          // Fallback: open a hidden textarea + execCommand
-          const t = document.createElement("textarea");
-          t.value = url; document.body.appendChild(t); t.select();
-          try { document.execCommand("copy"); } catch (_) {}
-          t.remove();
-        }
+        const text    = modal.dataset.shareText  || SITE_URL;
+        const logoUrl = modal.dataset.shareLogo  || "";
+        await copyRichClipboard(text, logoUrl);
         copyBtn.classList.add("share-btn-copied");
         if (copyLabel) {
           const orig = copyLabel.textContent;
