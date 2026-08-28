@@ -285,35 +285,24 @@ loader.load(MODEL_URL, (gltf) => {
   const aspect = Math.max(0.4, (rect.width || 1) / (rect.height || 1));
   const distForHeight = (fSize.y / 2) / Math.tan(fovRad / 2);
   const distForWidth  = (Math.max(fSize.x, fSize.z) / 2) / Math.tan(fovRad / 2) / aspect;
+  // Both viewports are locked to owner-tuned coords from the dev panel
+  // (2026-08-28). Anything not tuned falls back to auto-frame.
   const isMobile = rect.width < 640;
+  let distance;
   if (!isMobile) {
-    // DESKTOP — locked to the exact view the owner tuned in the dev panel
-    // (2026-08-28). Camera + target coords come straight from the saved
-    // JSON payload; distance/az/el are just for zoom-clamp math.
+    // DESKTOP
     camera.position.set(0.955, -0.082, 1.329);
     controls.target.set(0, -0.082, 0);
-    const distance = 1.637;
-    controls.minDistance = distance * 0.45;
-    controls.maxDistance = distance * 1.9;
-    controls.update();
+    distance = 1.637;
   } else {
-    // MOBILE — auto-frame with a small zoom-out for headroom + a slight
-    // upward bias so the bottle reads as a full hero on the phone.
-    const distMul   = 1.12;
-    const raiseFrac = 0.06;
-    const distance = Math.max(distForHeight, distForWidth) * distMul;
-    const startTheta = SPOT_CONFIG[0].theta;
-    const lookY = fCenter.y - fSize.y * raiseFrac;
-    camera.position.set(
-      distance * Math.cos(startTheta),
-      lookY,
-      distance * Math.sin(startTheta)
-    );
-    controls.target.set(0, lookY, 0);
-    controls.minDistance = distance * 0.45;
-    controls.maxDistance = distance * 1.9;
-    controls.update();
+    // MOBILE
+    camera.position.set(0.737, -0.041, 1.283);
+    controls.target.set(0, -0.041, 0);
+    distance = 1.480;
   }
+  controls.minDistance = distance * 0.45;
+  controls.maxDistance = distance * 1.9;
+  controls.update();
 
   // Add a bottom cap disc — this .glb's body mesh is open at the bottom, so
   // looking up from below revealed the sticker on the far side through the void.
