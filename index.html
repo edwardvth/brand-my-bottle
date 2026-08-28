@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Twelve stickers, one bottle — Brand My Bottle</title>
+  <title>Brand My Bottle — 11 stickers, 1 bottle, live auction</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -34,18 +34,40 @@
   </header>
 
   <main>
+    <!-- Money bar + live visitors — sits above the bottle without moving it -->
+    <div class="topbar">
+      <div class="visitors" aria-label="Live visitor stats">
+        <span class="live-dot"></span>
+        <strong id="visiting-now">—</strong>
+        <span class="visitors-sep">people visiting now</span>
+        <span class="visitors-dot">·</span>
+        <strong id="total-visitors">—</strong>
+        <span class="visitors-sep">visitors so far</span>
+      </div>
+      <div class="money-bar">
+        <div class="mb-top">
+          <div class="mb-raised">
+            <span class="mb-raised-amount">$<span id="raised-amount">0</span></span>
+            <span class="mb-raised-label">raised</span>
+          </div>
+          <div class="mb-goal" id="mb-goal">$50 goal</div>
+        </div>
+        <div class="mb-track"><div class="mb-fill" id="mb-fill" style="width:0%"></div></div>
+        <div class="mb-bottom">
+          Auction ends in <span id="countdown">—</span> · you can still outbid any spot
+        </div>
+        <div class="mb-note">Goal: $50 (for a new water bottle)</div>
+      </div>
+    </div>
+
     <!-- HERO — compact so bottle is visible above the fold -->
     <section id="stage" class="stage">
       <div class="hero-top">
-        <div class="eyebrow">
-          <span class="live-dot"></span>
-          Live auction · <span id="countdown">—</span> left
-        </div>
         <h1 class="display">
           Twelve stickers. <em>One bottle.</em>
         </h1>
         <p class="lede">
-          Your logo rides on my water bottle for a year. Tap a dashed square.
+          Your logo rides on my water bottle. Tap a dashed square.
         </p>
       </div>
 
@@ -59,23 +81,6 @@
         </button>
         <p class="hint">drag · scroll to zoom · hover a sticker to bid</p>
       </div>
-
-      <div class="stat-row">
-        <div class="stat">
-          <div class="stat-num">$<span id="raised-amount">0</span></div>
-          <div class="stat-label">raised</div>
-        </div>
-        <div class="stat divider"></div>
-        <div class="stat">
-          <div class="stat-num"><span id="taken-count">0</span>/<span id="taken-total">11</span></div>
-          <div class="stat-label">spots claimed</div>
-        </div>
-        <div class="stat divider"></div>
-        <div class="stat">
-          <div class="stat-num" id="high-bid">$0</div>
-          <div class="stat-label">high bid</div>
-        </div>
-      </div>
     </section>
 
     <!-- Water wave divider -->
@@ -83,13 +88,44 @@
       <path d="M0,30 C240,50 480,10 720,30 C960,50 1200,10 1440,30 L1440,60 L0,60 Z" fill="var(--sea-tint)"/>
     </svg>
 
-    <!-- GRID -->
+    <!-- SPOTS + HISTORY tabs -->
     <section id="spots" class="grid-section">
-      <div class="section-head">
-        <div class="eyebrow static">All twelve spots</div>
-        <h2 class="section-h2">Pick one. Bid. Win.</h2>
+      <div class="tab-switcher" role="tablist">
+        <button class="tab active" data-tab="spots" role="tab" aria-selected="true">Spots</button>
+        <button class="tab"        data-tab="history" role="tab" aria-selected="false">
+          History (<span id="history-count">0</span>)
+        </button>
       </div>
-      <div id="spot-grid" class="spot-grid"></div>
+
+      <div class="tab-pane" data-pane="spots">
+        <div class="spot-table-wrap">
+          <table class="spot-table">
+            <thead>
+              <tr>
+                <th class="th-spot">Spot</th>
+                <th class="th-size">Size</th>
+                <th class="th-held">Held by</th>
+                <th class="th-bid ta-r">Current bid</th>
+                <th class="th-cta"></th>
+              </tr>
+            </thead>
+            <tbody id="spot-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="tab-pane" data-pane="history" hidden>
+        <div class="hist-controls">
+          <select id="hist-filter" class="hist-select">
+            <option value="">All spots</option>
+          </select>
+          <div class="pill-toggle">
+            <button class="pt active" data-sort="newest">Newest</button>
+            <button class="pt"        data-sort="highest">Highest</button>
+          </div>
+        </div>
+        <div id="history-list" class="history-list"></div>
+      </div>
     </section>
 
     <!-- FAQ -->
@@ -99,10 +135,9 @@
         <h2 class="section-h2">The short version.</h2>
       </div>
       <div class="faq-list">
-        <details><summary>How long does the sticker stay on?</summary><p>Twelve months from auction close.</p></details>
         <details><summary>What if I get outbid?</summary><p>Card refunded automatically within 5–10 business days.</p></details>
         <details><summary>What file do you need?</summary><p>PNG or SVG with a transparent background. I email you a preview before printing.</p></details>
-        <details><summary>Where do you take the bottle?</summary><p>Everywhere. Weekly photos on X.</p></details>
+        <details><summary>Where does the bottle go?</summary><p>Everywhere I go. Weekly photos on X.</p></details>
       </div>
     </section>
   </main>

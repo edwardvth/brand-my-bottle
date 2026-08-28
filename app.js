@@ -425,20 +425,23 @@ function makeStickerTexture(spotId, price, taken, geomAspect = 1.35, opts = {}) 
     //     color language as the empty stickers).
     //   - Smaller "Outbid · $N" line beneath, same cream color.
 
+    // Image dominates: paper card takes ~78% of sticker height so the logo
+    // reads even at a distance. Brand + outbid text sit tight beneath.
     const inner  = { x: pad, y: pad, w: c.width - pad * 2, h: c.height - pad * 2 };
-    const cardH  = Math.round(inner.h * 0.62);
-    const brandSize   = Math.round(inner.h * 0.16);
-    const outbidSize  = Math.round(inner.h * 0.11);
-    const gapTextTop  = Math.round(inner.h * 0.05);
+    const cardH  = Math.round(inner.h * 0.78);
+    const brandSize   = Math.round(inner.h * 0.11);
+    const outbidSize  = Math.round(inner.h * 0.08);
+    const gapTextTop  = Math.round(inner.h * 0.025);
     const brandY      = inner.y + cardH + gapTextTop + brandSize * 0.55;
-    const outbidY     = brandY + brandSize * 0.60 + outbidSize * 0.8;
+    const outbidY     = brandY + brandSize * 0.55 + outbidSize * 0.75;
 
     // Paper card behind logo (catches transparent-PNG artwork)
     ctx.fillStyle = paper;
     ctx.fillRect(inner.x, inner.y, inner.w, cardH);
 
-    // Logo, contained within the paper card with a small inset
-    const cardInset = Math.round(inner.h * 0.05);
+    // Logo, contained within the paper card with a tight inset so the image
+    // fills the card visibly. Small breathing room only.
+    const cardInset = Math.round(inner.h * 0.03);
     const boxW = inner.w  - cardInset * 2;
     const boxH = cardH    - cardInset * 2;
     if (logoImg && logoImg.complete && logoImg.naturalWidth > 0) {
@@ -661,53 +664,209 @@ function loop() {
 }
 loop();
 
-// ---------- Grid (below the fold) ----------
-function mountGrid() {
-  const grid = document.getElementById("spot-grid");
-  grid.innerHTML = "";
-  for (let i = 1; i <= TOTAL; i++) {
-    const card = document.createElement("button");
-    card.className = "spot-card";
-    card.type = "button";
-    card.dataset.id = i;
-    card.addEventListener("click", () => openBidModal(i));
-    grid.appendChild(card);
-  }
-  refreshGrid();
+// ---------- Spots table + tabs (replaces the old card grid) ----------
+// Size badge: XL for the quads + tall verticals, L for the banner, M for the
+// die corners. Matches Mac-ref information density.
+function sizeBadgeFor(id) {
+  const area = (SPOT_CONFIG.find(c => c.id === id)?.wMul ?? 1) *
+               (SPOT_CONFIG.find(c => c.id === id)?.hMul ?? 1);
+  if (area >= 3.5) return "XL";
+  if (area >= 2.0) return "L";
+  return "M";
 }
-function refreshGrid() {
-  document.querySelectorAll(".spot-card").forEach(el => {
-    const id = parseInt(el.dataset.id, 10);
+function physDimsFor(id) {
+  const d = computeStickerDimsForSpot(id);
+  return d ? `${d.w} × ${d.h} cm` : "";
+}
+function escapeAttr(s) {
+  return String(s ?? "").replace(/[&<>"']/g, c =>
+    ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;" }[c]));
+}
+
+function mountSpotTable() {
+  const tbody = document.getElementById("spot-tbody");
+  if (!tbody) return;
+  tbody.innerHTML = "";
+  // Sort spots by current bid (desc), then by spot id (asc) for ties.
+  const ordered = [...SPOT_CONFIG].sort((a, b) => {
+    const ba = state.spots[a.id]?.amount ?? 0;
+    const bb = state.spots[b.id]?.amount ?? 0;
+    if (ba !== bb) return bb - ba;
+    return a.id - b.id;
+  });
+  for (const cfg of ordered) {
+    const id = cfg.id;
     const spot = state.spots[id];
-    if (spot) {
-      el.classList.add("taken");
-      el.innerHTML = `
-        <div class="spot-num">Spot ${String(id).padStart(2, "0")}</div>
-        <div class="spot-bid">$${spot.amount.toLocaleString()}</div>
-        <div class="spot-bidder">${escapeHtml(spot.bidderMasked)}</div>
-      `;
-    } else {
-      el.classList.remove("taken");
-      el.innerHTML = `
-        <div class="spot-num">Spot ${String(id).padStart(2, "0")}</div>
-        <div class="spot-bid">$${STARTING_BID}</div>
-        <div class="spot-cta">Open · bid →</div>
-      `;
+    const meta = SPOT_META[id] || { name: `Spot ${id}` };
+    const tr = document.createElement("tr");
+    tr.dataset.id = id;
+
+    const logoCell = spot?.logo
+      ? `<img src="${escapeAttr(spot.logo)}" class="spot-held-logo" alt="${escapeAttr(spot.brand || "")}" />`
+      : `<div class="spot-held-logo empty"></div>`;
+    const heldBy = spot
+      ? `<div class="spot-held">${logoCell}<span>${escapeHtml(spot.brand || "")}</span></div>`
+      : `<span class="spot-held-empty">Open</span>`;
+
+    const bidAmount = spot?.amount ?? STARTING_BID;
+    const bidCount  = spot?.bidCount ?? 0;
+    const bidCountLabel = bidCount > 0 ? `${bidCount} bid${bidCount === 1 ? "" : "s"}` : "no bids yet";
+
+    tr.innerHTML = `
+      <td class="td-spot">
+        <div class="spot-cell-name">
+          <span class="spot-number">${id}</span>
+          ${escapeHtml(meta.name)}
+        </div>
+      </td>
+      <td class="td-size">
+        <span class="spot-size-badge">${sizeBadgeFor(id)}</span>
+        <span class="spot-size-dims">${physDimsFor(id)}</span>
+      </td>
+      <td class="td-held">${heldBy}</td>
+      <td class="td-bid ta-r">
+        <div class="spot-bid-amt">$${bidAmount.toLocaleString()}</div>
+        <span class="spot-bid-count">${bidCountLabel}</span>
+      </td>
+      <td class="td-cta ta-r">
+        <button class="spot-outbid-btn" data-id="${id}">${spot ? "Outbid" : "Bid"}</button>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  }
+  // Wire the row-level buttons
+  tbody.querySelectorAll(".spot-outbid-btn").forEach(btn => {
+    btn.addEventListener("click", () => openBidModal(parseInt(btn.dataset.id, 10)));
+  });
+}
+// Back-compat: preserve the old function name so existing call sites keep working.
+function refreshGrid() { mountSpotTable(); }
+
+// ---------- History tab ----------
+let _historyRows  = [];    // raw rows from bmb_bid_history
+let _historyFilter = "";   // "" = all spots, else numeric spot id string
+let _historySort   = "newest"; // "newest" | "highest"
+
+function renderHistory() {
+  const list = document.getElementById("history-list");
+  if (!list) return;
+  const rows = _historyRows
+    .filter(r => !_historyFilter || String(r.spot_id) === _historyFilter)
+    .sort((a, b) => {
+      if (_historySort === "highest") return b.amount_cents - a.amount_cents;
+      return new Date(b.created_at) - new Date(a.created_at);
+    });
+
+  document.getElementById("history-count").textContent = _historyRows.length;
+
+  if (!rows.length) {
+    list.innerHTML = `<div class="history-empty">No bids yet. Be the first — click any spot on the bottle.</div>`;
+    return;
+  }
+  list.innerHTML = rows.map(r => {
+    const meta = SPOT_META[r.spot_id] || { name: `Spot ${r.spot_id}` };
+    const logo = r.logo_url
+      ? `<img src="${escapeAttr(r.logo_url)}" class="hist-row-logo" alt="${escapeAttr(r.brand || "")}" />`
+      : `<div class="hist-row-logo empty">${escapeHtml((r.brand || "?")[0].toUpperCase())}</div>`;
+    return `
+      <div class="hist-row">
+        ${logo}
+        <div class="hist-row-desc">
+          <span class="hist-brand">${escapeHtml(r.brand || "Anonymous")}</span>
+          <span class="hist-spot">· ${escapeHtml(meta.name)}</span>
+        </div>
+        <div class="hist-row-amt">$${centsToDollars(r.amount_cents).toLocaleString()}</div>
+        <div class="hist-row-time">${timeAgo(r.created_at)}</div>
+      </div>`;
+  }).join("");
+}
+
+function mountHistoryControls() {
+  const sel = document.getElementById("hist-filter");
+  if (sel && sel.options.length <= 1) {
+    // Prime the "All spots" dropdown with the current SPOT_CONFIG.
+    for (const cfg of SPOT_CONFIG) {
+      const meta = SPOT_META[cfg.id] || {};
+      const opt = document.createElement("option");
+      opt.value = String(cfg.id);
+      opt.textContent = `Spot ${cfg.id} — ${meta.name || ""}`.trim();
+      sel.appendChild(opt);
     }
+    sel.addEventListener("change", () => { _historyFilter = sel.value; renderHistory(); });
+  }
+  document.querySelectorAll(".pill-toggle .pt").forEach(btn => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".pill-toggle .pt").forEach(x => x.classList.remove("active"));
+      btn.classList.add("active");
+      _historySort = btn.dataset.sort;
+      renderHistory();
+    });
+  });
+  // Tab switching
+  document.querySelectorAll(".tab-switcher .tab").forEach(t => {
+    t.addEventListener("click", () => {
+      document.querySelectorAll(".tab-switcher .tab").forEach(x => {
+        x.classList.remove("active");
+        x.setAttribute("aria-selected", "false");
+      });
+      t.classList.add("active");
+      t.setAttribute("aria-selected", "true");
+      const which = t.dataset.tab;
+      document.querySelectorAll(".tab-pane").forEach(p => {
+        p.hidden = p.dataset.pane !== which;
+      });
+      if (which === "history") fetchHistory();
+    });
   });
 }
 
-// ---------- Totals ----------
+async function fetchHistory() {
+  try {
+    const { data, error } = await sb.from("bmb_bid_history")
+      .select("id, spot_id, amount_cents, brand, x_handle, website, logo_url, created_at")
+      .order("created_at", { ascending: false })
+      .limit(500);
+    if (error) throw error;
+    _historyRows = Array.isArray(data) ? data : [];
+  } catch (err) {
+    console.warn("[bmb] history fetch failed:", err.message || err);
+    _historyRows = [];
+  }
+  renderHistory();
+}
+
+function timeAgo(iso) {
+  const t = new Date(iso).getTime();
+  if (isNaN(t)) return "";
+  const s = Math.max(1, Math.round((Date.now() - t) / 1000));
+  if (s < 60)      return `${s}s ago`;
+  const m = Math.round(s / 60);
+  if (m < 60)      return `${m}m ago`;
+  const h = Math.round(m / 60);
+  if (h < 24)      return `${h}h ago`;
+  const d = Math.round(h / 24);
+  return `${d}d ago`;
+}
+
+// ---------- Totals + money bar ----------
+const GOAL_DOLLARS = 50;
 function refreshTotals() {
   const vals = Object.values(state.spots);
   const raised = vals.reduce((sum, s) => sum + (s ? s.amount : 0), 0);
-  const taken  = vals.filter(Boolean).length;
-  const high   = Math.max(0, ...vals.filter(Boolean).map(s => s.amount));
-  document.getElementById("raised-amount").textContent = raised.toLocaleString();
-  document.getElementById("taken-count").textContent = taken;
-  const totalEl = document.getElementById("taken-total");
-  if (totalEl) totalEl.textContent = TOTAL;
-  document.getElementById("high-bid").textContent = `$${high.toLocaleString()}`;
+  const raisedEl = document.getElementById("raised-amount");
+  if (raisedEl) raisedEl.textContent = raised.toLocaleString();
+  // Money bar: progress vs $50 goal; if past goal, show "goal passed · X%"
+  const pct = Math.max(0, Math.min(999, Math.round((raised / GOAL_DOLLARS) * 100)));
+  const fill = document.getElementById("mb-fill");
+  const goalEl = document.getElementById("mb-goal");
+  if (fill)  fill.style.width = `${Math.min(100, pct)}%`;
+  if (goalEl) {
+    goalEl.innerHTML = pct >= 100
+      ? `<span class="mb-goal-hit">goal passed · ${pct}%</span>`
+      : `$${GOAL_DOLLARS} goal · ${pct}%`;
+  }
+  // If the spots table is mounted, re-render so ordering reflects new bids.
+  mountSpotTable();
 }
 
 // ---------- Bid modal ----------
@@ -1035,7 +1194,8 @@ async function submitBidToSupabase({ spotId, amount, brand, email, website, xHan
 }
 
 // ---------- Init ----------
-mountGrid();
+mountSpotTable();
+mountHistoryControls();
 refreshTotals();
 tickCountdown();
 setInterval(tickCountdown, 30 * 1000);
@@ -1043,6 +1203,38 @@ resize();
 syncFromSupabase();
 // Poll every 20s for competing bids
 setInterval(syncFromSupabase, 20 * 1000);
+
+// ---------- Live visitor heartbeat ----------
+// Every open tab gets an opaque uuid persisted in localStorage. Every 30s we
+// POST it to the bmb-beat Edge Function, which upserts the row and returns the
+// aggregate counts. Numbers here are REAL (5-min sliding window for "now").
+(function initVisitorBeat() {
+  const KEY = "bmb_visitor_token";
+  let token = localStorage.getItem(KEY);
+  if (!token) {
+    token = crypto.randomUUID();
+    localStorage.setItem(KEY, token);
+  }
+  const now  = document.getElementById("visiting-now");
+  const total = document.getElementById("total-visitors");
+  async function beat() {
+    try {
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/bmb-beat`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ token }),
+      });
+      const data = await res.json();
+      if (typeof data.visiting_now  === "number" && now)   now.textContent   = data.visiting_now.toLocaleString();
+      if (typeof data.total_visitors === "number" && total) total.textContent = data.total_visitors.toLocaleString();
+    } catch (_) { /* offline is fine — just don't update */ }
+  }
+  beat();
+  setInterval(beat, 30_000);
+})();
 
 // ---------- Stripe return-from-Checkout toast ----------
 // Kept at the very bottom of the file to minimise conflict area with the 3D

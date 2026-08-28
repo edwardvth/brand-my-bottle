@@ -516,3 +516,322 @@ footer a:hover { color: var(--teal); }
   .stat.divider { height: 24px; }
   .grid-section { padding: 40px 18px 56px; }
 }
+
+/* ================================================================
+   TOPBAR: live visitors pill + money bar (above the hero)
+   ================================================================ */
+.topbar {
+  max-width: 1160px;
+  margin: 0 auto;
+  padding: 20px 32px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.visitors {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font: 500 14px/1.3 Inter, sans-serif;
+  color: var(--ink-2);
+  align-self: flex-start;
+}
+.visitors strong { color: var(--ink); font-weight: 700; }
+.visitors-sep    { color: var(--ink-2); font-weight: 400; }
+.visitors-dot    { color: var(--ink-2); opacity: 0.55; margin: 0 4px; }
+.visitors .live-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: #16a34a;
+  box-shadow: 0 0 0 3px rgba(22,163,74,0.18);
+  animation: livePulse 2s ease-in-out infinite;
+}
+@keyframes livePulse {
+  0%, 100% { box-shadow: 0 0 0 3px rgba(22,163,74,0.18); }
+  50%      { box-shadow: 0 0 0 5px rgba(22,163,74,0.06); }
+}
+
+.money-bar {
+  background: transparent;
+  padding: 0;
+}
+.mb-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 10px;
+}
+.mb-raised { display: inline-flex; align-items: baseline; gap: 8px; }
+.mb-raised-amount {
+  font: 700 34px/1 Inter, sans-serif;
+  color: #16a34a;
+  letter-spacing: -0.02em;
+}
+.mb-raised-label {
+  font: 500 14px/1 Inter, sans-serif;
+  color: var(--ink-2);
+}
+.mb-goal {
+  font: 500 14px/1 Inter, sans-serif;
+  color: var(--ink-2);
+  text-align: right;
+}
+.mb-goal .mb-goal-hit { color: #16a34a; font-weight: 700; }
+
+.mb-track {
+  height: 10px;
+  background: #d9e3d9;
+  border-radius: 999px;
+  overflow: hidden;
+  position: relative;
+}
+.mb-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #22c55e, #16a34a);
+  border-radius: 999px;
+  transition: width 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.mb-bottom {
+  margin-top: 10px;
+  font: 500 13px/1.4 Inter, sans-serif;
+  color: var(--ink-2);
+}
+.mb-note {
+  margin-top: 4px;
+  font: 400 12px/1.4 Inter, sans-serif;
+  color: var(--ink-2);
+  opacity: 0.75;
+}
+
+@media (max-width: 640px) {
+  .topbar { padding: 14px 16px 0; gap: 10px; }
+  .mb-raised-amount { font-size: 26px; }
+  .mb-goal { font-size: 13px; }
+}
+
+/* ================================================================
+   TABS: Spots + History
+   ================================================================ */
+.tab-switcher {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  background: var(--paper-2);
+  border-radius: 999px;
+  margin-bottom: 22px;
+}
+.tab {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  padding: 8px 18px;
+  font: 600 14px/1 Inter, sans-serif;
+  color: var(--ink-2);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 160ms ease, color 160ms ease;
+}
+.tab:hover { color: var(--ink); }
+.tab.active {
+  background: #ffffff;
+  color: var(--ink);
+  box-shadow: 0 1px 3px rgba(11,20,22,0.08);
+}
+.tab-pane[hidden] { display: none; }
+
+/* ---- Spots table ---- */
+.spot-table-wrap {
+  background: #ffffff;
+  border: 1px solid rgba(11,20,22,0.06);
+  border-radius: 16px;
+  overflow: hidden;
+}
+.spot-table {
+  width: 100%;
+  border-collapse: collapse;
+  font: 500 14px/1.4 Inter, sans-serif;
+}
+.spot-table thead th {
+  font: 500 12px/1 Inter, sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ink-2);
+  text-align: left;
+  padding: 14px 18px;
+  border-bottom: 1px solid rgba(11,20,22,0.06);
+  background: rgba(242,237,226,0.4);
+}
+.spot-table thead th.ta-r { text-align: right; }
+.spot-table tbody td {
+  padding: 16px 18px;
+  border-bottom: 1px solid rgba(11,20,22,0.04);
+  vertical-align: middle;
+  color: var(--ink);
+}
+.spot-table tbody tr:last-child td { border-bottom: 0; }
+.spot-table tbody tr:hover { background: rgba(242,237,226,0.35); }
+
+.spot-number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px; height: 30px;
+  border-radius: 8px;
+  background: var(--paper-2);
+  font: 700 13px/1 Inter, sans-serif;
+  color: var(--ink);
+  margin-right: 12px;
+  flex-shrink: 0;
+}
+.spot-cell-name {
+  display: flex;
+  align-items: center;
+  color: var(--ink);
+  font-weight: 600;
+}
+.spot-size-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px; height: 22px;
+  border-radius: 6px;
+  background: var(--paper-2);
+  color: var(--ink-2);
+  font: 700 11px/1 Inter, sans-serif;
+  margin-right: 10px;
+}
+.spot-size-dims { color: var(--ink-2); font-weight: 500; }
+
+.spot-held {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--ink);
+  font-weight: 600;
+}
+.spot-held-logo {
+  width: 34px; height: 34px;
+  object-fit: contain;
+  border-radius: 8px;
+  background: var(--paper);
+  flex-shrink: 0;
+}
+.spot-held-empty {
+  color: var(--ink-2);
+  font-weight: 400;
+  font-style: italic;
+}
+
+.spot-bid-amt {
+  font: 700 16px/1.2 Inter, sans-serif;
+  color: var(--ink);
+  text-align: right;
+}
+.spot-bid-count {
+  display: block;
+  font: 500 12px/1 Inter, sans-serif;
+  color: var(--ink-2);
+  margin-top: 4px;
+  text-align: right;
+}
+
+.spot-outbid-btn {
+  appearance: none;
+  border: 1.5px solid var(--teal);
+  background: transparent;
+  color: var(--teal);
+  padding: 8px 20px;
+  border-radius: 999px;
+  font: 600 14px/1 Inter, sans-serif;
+  cursor: pointer;
+  transition: background 140ms ease, color 140ms ease;
+  white-space: nowrap;
+}
+.spot-outbid-btn:hover {
+  background: var(--teal);
+  color: #ffffff;
+}
+
+/* ---- History list ---- */
+.hist-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+.hist-select {
+  appearance: none;
+  border: 1px solid rgba(11,20,22,0.14);
+  background: #ffffff url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path fill='%230b1416' d='M0 0l5 6 5-6z'/></svg>") right 14px center / 10px 6px no-repeat;
+  padding: 10px 40px 10px 16px;
+  border-radius: 999px;
+  font: 500 14px/1 Inter, sans-serif;
+  color: var(--ink);
+  cursor: pointer;
+  min-width: 180px;
+}
+.pill-toggle {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  background: var(--paper-2);
+  border-radius: 999px;
+}
+.pt {
+  appearance: none; border: 0; background: transparent;
+  padding: 6px 16px;
+  font: 600 13px/1 Inter, sans-serif;
+  color: var(--ink-2);
+  border-radius: 999px;
+  cursor: pointer;
+}
+.pt.active { background: #ffffff; color: var(--ink); }
+
+.history-list {
+  background: #ffffff;
+  border: 1px solid rgba(11,20,22,0.06);
+  border-radius: 16px;
+  overflow: hidden;
+}
+.hist-row {
+  display: grid;
+  grid-template-columns: 50px 1fr auto auto;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 18px;
+  border-bottom: 1px solid rgba(11,20,22,0.04);
+  font: 500 14px/1.4 Inter, sans-serif;
+}
+.hist-row:last-child { border-bottom: 0; }
+.hist-row-logo {
+  width: 36px; height: 36px;
+  object-fit: contain;
+  border-radius: 8px;
+  background: var(--paper);
+}
+.hist-row-logo.empty {
+  background: var(--paper-2);
+  display: flex; align-items: center; justify-content: center;
+  font: 700 14px/1 Inter, sans-serif; color: var(--ink-2);
+}
+.hist-row-desc { color: var(--ink); }
+.hist-row-desc .hist-brand { font-weight: 700; }
+.hist-row-desc .hist-spot { color: var(--ink-2); font-weight: 500; margin-left: 6px; }
+.hist-row-amt  { font: 700 15px/1 Inter, sans-serif; color: var(--ink); }
+.hist-row-time { font: 500 13px/1 Inter, sans-serif; color: var(--ink-2); min-width: 60px; text-align: right; }
+.history-empty {
+  padding: 40px 20px;
+  text-align: center;
+  color: var(--ink-2);
+  font: 500 14px/1.5 Inter, sans-serif;
+}
+
+@media (max-width: 640px) {
+  .spot-table thead .th-size,
+  .spot-table tbody .td-size { display: none; }
+  .spot-table thead th, .spot-table tbody td { padding: 12px 10px; }
+  .spot-outbid-btn { padding: 6px 12px; font-size: 13px; }
+  .hist-row { grid-template-columns: 36px 1fr auto; gap: 10px; padding: 12px 12px; }
+  .hist-row-time { display: none; }
+}
