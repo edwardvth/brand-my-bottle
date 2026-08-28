@@ -276,10 +276,47 @@ em { font-family: var(--serif); font-style: italic; font-weight: 400; letter-spa
 .spot-card.taken {
   background: var(--ink);
   color: var(--paper);
+  padding: 18px 14px 16px;
+  gap: 6px;
 }
 .spot-card.taken .spot-num,
 .spot-card.taken .spot-bidder { color: rgba(242, 237, 226, 0.55); }
-.spot-card.taken .spot-bid { color: var(--paper); }
+.spot-card.taken .spot-bid { color: var(--paper); font-size: 26px; }
+.spot-card .spot-card-name {
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: 0.02em;
+  margin-top: 2px;
+}
+.spot-card-logo {
+  width: 56px; height: 56px;
+  border-radius: 12px;
+  object-fit: contain;
+  background: var(--paper);
+  padding: 6px;
+  margin: 0 auto 4px;
+  display: block;
+}
+.spot-card-logo.empty {
+  background: var(--paper-2);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--ink); font: 700 22px/1 Inter, sans-serif;
+}
+.spot-card.taken .spot-card-brand {
+  font: 700 15px/1.2 Inter, -apple-system, sans-serif;
+  color: var(--paper);
+  margin-top: 2px;
+}
+.spot-card.taken .spot-card-cta {
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--teal-soft);
+  margin-top: 4px;
+  font-weight: 700;
+}
+.spot-card.taken:hover { background: #16211e; }
+.spot-card.taken:hover .spot-card-cta { color: #ffffff; }
 
 /* ---------- FAQ ---------- */
 .faq-section { padding-top: 32px; }
@@ -521,9 +558,9 @@ footer a:hover { color: var(--teal); }
    TOPBAR: live visitors pill + money bar (above the hero)
    ================================================================ */
 .topbar {
-  max-width: 1160px;
+  max-width: 680px;      /* narrower than the hero — feels like a status ribbon, not a section */
   margin: 0 auto;
-  padding: 20px 32px 0;
+  padding: 20px 24px 0;
   display: flex;
   flex-direction: column;
   gap: 14px;

@@ -683,64 +683,119 @@ function escapeAttr(s) {
     ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;" }[c]));
 }
 
-function mountSpotTable() {
-  const tbody = document.getElementById("spot-tbody");
-  if (!tbody) return;
-  tbody.innerHTML = "";
-  // Sort spots by current bid (desc), then by spot id (asc) for ties.
+// Two modes:
+//   - GRID  → shown while any spot is still open. Chunky cards with the
+//              uploaded logo + brand for taken, "$1 · Open" for empty.
+//              This is the fun/marketing view — encourages people to grab
+//              the empty ones.
+//   - TABLE → shown once every spot is held. Denser, sortable-feeling row
+//              layout so late bidders scan quickly for the cheapest ones
+//              they could still outbid.
+function renderSpots() {
+  const body = document.getElementById("spots-body");
+  if (!body) return;
+  const filled = Object.values(state.spots).filter(Boolean).length;
+  if (filled >= TOTAL) {
+    renderSpotsTable(body);
+  } else {
+    renderSpotsGrid(body);
+  }
+}
+// Kept so old call sites (buildStickers, sync, etc) continue to work.
+function refreshGrid()     { renderSpots(); }
+function mountSpotTable()  { renderSpots(); }
+
+function renderSpotsGrid(body) {
+  const cards = SPOT_CONFIG.map(cfg => {
+    const id   = cfg.id;
+    const spot = state.spots[id];
+    const meta = SPOT_META[id] || { name: `Spot ${id}` };
+    if (spot) {
+      const logo = spot.logo
+        ? `<img class="spot-card-logo" src="${escapeAttr(spot.logo)}" alt="${escapeAttr(spot.brand)}" />`
+        : `<div class="spot-card-logo empty">${escapeHtml((spot.brand || "?")[0].toUpperCase())}</div>`;
+      return `
+        <button class="spot-card taken" data-id="${id}" type="button">
+          ${logo}
+          <div class="spot-card-brand">${escapeHtml(spot.brand || "Anonymous")}</div>
+          <div class="spot-card-bid">$${spot.amount.toLocaleString()}</div>
+          <div class="spot-card-cta">Outbid →</div>
+        </button>`;
+    }
+    return `
+      <button class="spot-card" data-id="${id}" type="button">
+        <div class="spot-num">Spot ${String(id).padStart(2, "0")}</div>
+        <div class="spot-card-name">${escapeHtml(meta.name)}</div>
+        <div class="spot-bid">$${STARTING_BID}</div>
+        <div class="spot-cta">Open · bid →</div>
+      </button>`;
+  }).join("");
+  body.innerHTML = `<div class="spot-grid">${cards}</div>`;
+  body.querySelectorAll(".spot-card").forEach(el => {
+    el.addEventListener("click", () => openBidModal(parseInt(el.dataset.id, 10)));
+  });
+}
+
+function renderSpotsTable(body) {
   const ordered = [...SPOT_CONFIG].sort((a, b) => {
     const ba = state.spots[a.id]?.amount ?? 0;
     const bb = state.spots[b.id]?.amount ?? 0;
     if (ba !== bb) return bb - ba;
     return a.id - b.id;
   });
-  for (const cfg of ordered) {
-    const id = cfg.id;
+  const rows = ordered.map(cfg => {
+    const id   = cfg.id;
     const spot = state.spots[id];
     const meta = SPOT_META[id] || { name: `Spot ${id}` };
-    const tr = document.createElement("tr");
-    tr.dataset.id = id;
-
     const logoCell = spot?.logo
       ? `<img src="${escapeAttr(spot.logo)}" class="spot-held-logo" alt="${escapeAttr(spot.brand || "")}" />`
       : `<div class="spot-held-logo empty"></div>`;
     const heldBy = spot
       ? `<div class="spot-held">${logoCell}<span>${escapeHtml(spot.brand || "")}</span></div>`
       : `<span class="spot-held-empty">Open</span>`;
-
     const bidAmount = spot?.amount ?? STARTING_BID;
     const bidCount  = spot?.bidCount ?? 0;
     const bidCountLabel = bidCount > 0 ? `${bidCount} bid${bidCount === 1 ? "" : "s"}` : "no bids yet";
-
-    tr.innerHTML = `
-      <td class="td-spot">
-        <div class="spot-cell-name">
-          <span class="spot-number">${id}</span>
-          ${escapeHtml(meta.name)}
-        </div>
-      </td>
-      <td class="td-size">
-        <span class="spot-size-badge">${sizeBadgeFor(id)}</span>
-        <span class="spot-size-dims">${physDimsFor(id)}</span>
-      </td>
-      <td class="td-held">${heldBy}</td>
-      <td class="td-bid ta-r">
-        <div class="spot-bid-amt">$${bidAmount.toLocaleString()}</div>
-        <span class="spot-bid-count">${bidCountLabel}</span>
-      </td>
-      <td class="td-cta ta-r">
-        <button class="spot-outbid-btn" data-id="${id}">${spot ? "Outbid" : "Bid"}</button>
-      </td>
-    `;
-    tbody.appendChild(tr);
-  }
-  // Wire the row-level buttons
-  tbody.querySelectorAll(".spot-outbid-btn").forEach(btn => {
+    return `
+      <tr data-id="${id}">
+        <td class="td-spot">
+          <div class="spot-cell-name">
+            <span class="spot-number">${id}</span>${escapeHtml(meta.name)}
+          </div>
+        </td>
+        <td class="td-size">
+          <span class="spot-size-badge">${sizeBadgeFor(id)}</span>
+          <span class="spot-size-dims">${physDimsFor(id)}</span>
+        </td>
+        <td class="td-held">${heldBy}</td>
+        <td class="td-bid ta-r">
+          <div class="spot-bid-amt">$${bidAmount.toLocaleString()}</div>
+          <span class="spot-bid-count">${bidCountLabel}</span>
+        </td>
+        <td class="td-cta ta-r">
+          <button class="spot-outbid-btn" data-id="${id}">${spot ? "Outbid" : "Bid"}</button>
+        </td>
+      </tr>`;
+  }).join("");
+  body.innerHTML = `
+    <div class="spot-table-wrap">
+      <table class="spot-table">
+        <thead>
+          <tr>
+            <th class="th-spot">Spot</th>
+            <th class="th-size">Size</th>
+            <th class="th-held">Held by</th>
+            <th class="th-bid ta-r">Current bid</th>
+            <th class="th-cta"></th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+  body.querySelectorAll(".spot-outbid-btn").forEach(btn => {
     btn.addEventListener("click", () => openBidModal(parseInt(btn.dataset.id, 10)));
   });
 }
-// Back-compat: preserve the old function name so existing call sites keep working.
-function refreshGrid() { mountSpotTable(); }
 
 // ---------- History tab ----------
 let _historyRows  = [];    // raw rows from bmb_bid_history

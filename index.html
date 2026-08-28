@@ -83,11 +83,6 @@
       </div>
     </section>
 
-    <!-- Water wave divider -->
-    <svg class="wave-divider" viewBox="0 0 1440 60" preserveAspectRatio="none" aria-hidden="true">
-      <path d="M0,30 C240,50 480,10 720,30 C960,50 1200,10 1440,30 L1440,60 L0,60 Z" fill="var(--sea-tint)"/>
-    </svg>
-
     <!-- SPOTS + HISTORY tabs -->
     <section id="spots" class="grid-section">
       <div class="tab-switcher" role="tablist">
@@ -98,20 +93,8 @@
       </div>
 
       <div class="tab-pane" data-pane="spots">
-        <div class="spot-table-wrap">
-          <table class="spot-table">
-            <thead>
-              <tr>
-                <th class="th-spot">Spot</th>
-                <th class="th-size">Size</th>
-                <th class="th-held">Held by</th>
-                <th class="th-bid ta-r">Current bid</th>
-                <th class="th-cta"></th>
-              </tr>
-            </thead>
-            <tbody id="spot-tbody"></tbody>
-          </table>
-        </div>
+        <!-- Populated by JS: card grid while any spot is open, then table once all filled -->
+        <div id="spots-body"></div>
       </div>
 
       <div class="tab-pane" data-pane="history" hidden>
