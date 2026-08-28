@@ -79,11 +79,17 @@
       <div class="canvas-wrap">
         <canvas id="scene"></canvas>
         <!-- floating Outbid pill, positioned in JS based on hovered sticker -->
-        <button id="hover-pill" class="hover-pill" hidden aria-label="Bid on this spot">
-          <span class="pill-verb" id="pill-verb">Bid</span>
-          <span class="pill-sep">·</span>
-          <span class="pill-price" id="pill-price">$1</span>
-        </button>
+        <div id="hover-pill" class="hover-pill" hidden>
+          <div class="pill-info" id="pill-info" hidden>
+            <div class="pill-brand" id="pill-brand"></div>
+            <div class="pill-links" id="pill-links"></div>
+          </div>
+          <button class="pill-btn" id="pill-btn" type="button" aria-label="Bid on this spot">
+            <span class="pill-verb" id="pill-verb">Bid</span>
+            <span class="pill-sep">·</span>
+            <span class="pill-price" id="pill-price">$1</span>
+          </button>
+        </div>
         <p class="hint">drag · scroll to zoom · hover a sticker to bid</p>
       </div>
     </section>

@@ -134,34 +134,71 @@ em { font-family: var(--serif); font-style: italic; font-weight: 400; letter-spa
 .hover-pill {
   position: absolute;
   transform: translate(-50%, -50%);
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  pointer-events: none;   /* container is a positioner; interactive parts opt in */
+  z-index: 10;
+}
+.hover-pill[hidden] { display: none; }
+
+/* When a spot is taken, this card sits ABOVE the Outbid button and shows
+   brand + optional website + optional X handle. Hidden for empty spots. */
+.pill-info {
+  background: rgba(11, 20, 22, 0.94);
+  color: var(--paper);
+  padding: 10px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,0.12);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+  pointer-events: auto;
+  min-width: 140px;
+  max-width: 240px;
+  text-align: center;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+.pill-info[hidden] { display: none; }
+.pill-brand {
+  font: 700 14px/1.2 Inter, sans-serif;
+  color: var(--paper);
+  margin-bottom: 4px;
+}
+.pill-links {
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  font: 500 12px/1.2 Inter, sans-serif;
+}
+.pill-links a {
+  color: var(--teal-soft);
+  text-decoration: none;
+  border-bottom: 1px dashed rgba(127, 184, 182, 0.5);
+}
+.pill-links a:hover { color: #ffffff; border-bottom-color: #ffffff; }
+
+/* The actual Outbid / Bid button. Was the whole .hover-pill before. */
+.pill-btn {
   display: inline-flex; align-items: center; gap: 6px;
-  padding: 8px 16px;
+  padding: 10px 20px;
   background: linear-gradient(135deg, var(--teal) 0%, var(--teal-deep) 100%);
   color: white;
   border: 2px solid rgba(255,255,255,0.9);
   border-radius: 999px;
   font-family: var(--sans);
-  font-size: 13px; font-weight: 600;
+  font-size: 14px; font-weight: 600;
   letter-spacing: 0.01em;
   box-shadow:
     0 0 0 4px rgba(14, 124, 123, 0.25),
     0 8px 24px rgba(14, 124, 123, 0.35),
     0 0 40px rgba(94, 234, 212, 0.5);
-  /* pointer-events:auto — the pill IS clickable now. Flicker is prevented in
-     JS via relatedTarget check on canvas pointerleave (see app.js). */
   pointer-events: auto;
   cursor: pointer;
-  z-index: 10;
   animation: pill-glow 1.6s ease-in-out infinite;
   white-space: nowrap;
 }
-.hover-pill:hover {
-  transform: translate(-50%, -50%) scale(1.05);
+.pill-btn:hover {
+  transform: scale(1.05);
   transition: transform 100ms ease;
 }
-.hover-pill[hidden] { display: none; }
-.hover-pill .pill-sep { opacity: 0.6; margin: 0 2px; }
-.hover-pill .pill-price { font-family: var(--serif); font-size: 16px; letter-spacing: -0.01em; }
+.pill-btn .pill-sep { opacity: 0.6; margin: 0 2px; }
+.pill-btn .pill-price { font-family: var(--serif); font-size: 17px; letter-spacing: -0.01em; }
 @keyframes pill-glow {
   0%, 100% { box-shadow: 0 0 0 4px rgba(14, 124, 123, 0.25), 0 8px 24px rgba(14, 124, 123, 0.35), 0 0 40px rgba(94, 234, 212, 0.5); }
   50%      { box-shadow: 0 0 0 6px rgba(14, 124, 123, 0.35), 0 8px 32px rgba(14, 124, 123, 0.5),  0 0 60px rgba(94, 234, 212, 0.75); }
@@ -613,11 +650,11 @@ footer a:hover { color: var(--teal); }
 
 /* Mobile */
 @media (max-width: 640px) {
-  .site-header { padding: 8px 14px; }
-  .site-header nav { gap: 12px; }
-  .stage { padding: 6px 14px 18px; }
+  .site-header { padding: 10px 16px; }
+  .site-header nav { gap: 14px; }
+  .stage { padding: 8px 14px 20px; }
   /* Bigger canvas — mobile viewports are tall, use them */
-  .canvas-wrap { height: min(560px, 62vh); max-width: 100%; margin: 4px 0 0; }
+  .canvas-wrap { height: min(620px, 68vh); max-width: 100%; margin: 8px 0 0; }
   .stat-row { gap: 14px; padding-top: 18px; }
   .stat.divider { height: 24px; }
   .grid-section { padding: 40px 18px 56px; }
@@ -695,9 +732,9 @@ footer a:hover { color: var(--teal); }
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font: 500 12px/1.2 Inter, sans-serif;
+  font: 500 13px/1.2 Inter, sans-serif;
   color: var(--ink-2);
-  align-self: flex-start;
+  align-self: center;   /* centered above the money bar on all viewports */
   white-space: nowrap;
 }
 .visitors strong { color: var(--ink); font-weight: 700; }
@@ -768,12 +805,14 @@ footer a:hover { color: var(--teal); }
 }
 
 @media (max-width: 640px) {
-  .topbar { padding: 4px 14px 0; gap: 4px; }
-  .mb-raised-amount { font-size: 20px; }
-  .mb-goal { font-size: 12px; }
-  .mb-bottom, .mb-note { font-size: 11px; }
-  .hero-top { gap: 4px; margin-bottom: 0; }
-  .display { font-size: clamp(22px, 6vw, 34px); }
+  .topbar { padding: 8px 16px 0; gap: 8px; }
+  .mb-raised-amount { font-size: 26px; }
+  .mb-goal { font-size: 13px; }
+  .mb-bottom { font-size: 12px; }
+  .mb-note { font-size: 11px; }
+  .visitors { font-size: 13px; }
+  .hero-top { gap: 6px; margin-bottom: 4px; }
+  .display { font-size: clamp(26px, 7vw, 38px); }
 }
 
 /* ================================================================

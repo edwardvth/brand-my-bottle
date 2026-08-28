@@ -272,12 +272,12 @@ loader.load(MODEL_URL, (gltf) => {
   const aspect = Math.max(0.4, (rect.width || 1) / (rect.height || 1));
   const distForHeight = (fSize.y / 2) / Math.tan(fovRad / 2);
   const distForWidth  = (Math.max(fSize.x, fSize.z) / 2) / Math.tan(fovRad / 2) / aspect;
-  // Mobile: pull back a touch and push the bottle HIGHER in the frame so
-  // the whole thing fits without clipping the base + the cap tucks right
-  // under the lede text.
+  // Mobile: slight zoom-out for headroom, and only a small upward bias — the
+  // bottle should sit lower / bigger than my previous overly-tight settings
+  // so it reads as a full "look at this bottle" hero, not a floating chip.
   const isMobile = rect.width < 640;
-  const distMul   = isMobile ? 1.28 : 1.08;
-  const raiseFrac = isMobile ? 0.24 : 0.12;
+  const distMul   = isMobile ? 1.12 : 1.08;
+  const raiseFrac = isMobile ? 0.06 : 0.12;
   const distance = Math.max(distForHeight, distForWidth) * distMul;
   const startTheta = SPOT_CONFIG[0].theta;
   const lookY = fCenter.y - fSize.y * raiseFrac;
@@ -580,10 +580,39 @@ function buildStickers() {
 // ---------- Click + hover detection ----------
 const raycaster = new THREE.Raycaster();
 const pointer = new THREE.Vector2();
-const pillEl = document.getElementById("hover-pill");
-const pillVerbEl = document.getElementById("pill-verb");
+const pillEl      = document.getElementById("hover-pill");
+const pillBtnEl   = document.getElementById("pill-btn");
+const pillVerbEl  = document.getElementById("pill-verb");
 const pillPriceEl = document.getElementById("pill-price");
+const pillInfoEl  = document.getElementById("pill-info");
+const pillBrandEl = document.getElementById("pill-brand");
+const pillLinksEl = document.getElementById("pill-links");
 let hoveredSpotId = null;
+
+function normaliseUrl(u) {
+  if (!u) return null;
+  const s = String(u).trim();
+  if (!s) return null;
+  return /^https?:\/\//i.test(s) ? s : `https://${s}`;
+}
+function xHandleUrl(h) {
+  if (!h) return null;
+  const clean = String(h).trim().replace(/^@+/, "");
+  return clean ? `https://x.com/${encodeURIComponent(clean)}` : null;
+}
+// Populate the info card above the Outbid button for TAKEN spots.
+function fillPillInfo(spot) {
+  if (!spot) { pillInfoEl.hidden = true; return; }
+  pillBrandEl.textContent = spot.brand || "Anonymous";
+  const links = [];
+  const url = normaliseUrl(spot.website);
+  const xu  = xHandleUrl(spot.x_handle);
+  if (url) links.push(`<a href="${escapeAttr(url)}" target="_blank" rel="noopener">Website</a>`);
+  if (xu)  links.push(`<a href="${escapeAttr(xu)}"  target="_blank" rel="noopener">@${escapeHtml(String(spot.x_handle).replace(/^@+/, ""))}</a>`);
+  pillLinksEl.innerHTML = links.join('<span class="pill-links-sep">·</span>');
+  pillLinksEl.style.display = links.length ? "" : "none";
+  pillInfoEl.hidden = false;
+}
 
 function raycastSticker(clientX, clientY) {
   const rect = canvasEl.getBoundingClientRect();
@@ -605,6 +634,18 @@ canvasEl.addEventListener("click", (e) => {
   if (hit) openBidModal(hit.userData.spotId);
 });
 
+// Mobile: a tap on a sticker should open the bid modal DIRECTLY (there is
+// no hover, so the pill's click-to-bid flow is unreachable without this).
+canvasEl.addEventListener("pointerup", (e) => {
+  if (e.pointerType !== "touch") return;
+  if (didDrag) return;
+  const hit = raycastSticker(e.clientX, e.clientY);
+  if (hit) {
+    e.preventDefault();
+    openBidModal(hit.userData.spotId);
+  }
+});
+
 // Hover → move & show the Outbid pill at the hovered sticker's screen position
 canvasEl.addEventListener("pointermove", (e) => {
   if (e.buttons > 0) return;  // ignore while dragging
@@ -622,27 +663,27 @@ canvasEl.addEventListener("pointermove", (e) => {
   const verb = spot ? "Outbid" : "Bid";
   pillVerbEl.textContent = verb;
   pillPriceEl.textContent = `$${(spot ? price + MIN_INCREMENT : price).toLocaleString()}`;
+  fillPillInfo(spot);
   positionPillAt(hit);
   pillEl.hidden = false;
   canvasEl.style.cursor = "pointer";
 });
 canvasEl.addEventListener("pointerleave", (e) => {
-  // If the mouse is moving ONTO the pill (which now has pointer-events:auto so
-  // it's actually clickable), don't hide it — otherwise we get an infinite
-  // hide→show flicker.
+  // Moving onto the pill (btn or info card, which are clickable) should NOT
+  // hide the pill — otherwise we get flicker.
   if (e.relatedTarget === pillEl || (pillEl && pillEl.contains && pillEl.contains(e.relatedTarget))) return;
   hoveredSpotId = null;
   pillEl.hidden = true;
 });
 // Direct pill click — opens the modal for the currently-hovered sticker.
-pillEl.addEventListener("click", (e) => {
+pillBtnEl.addEventListener("click", (e) => {
   e.stopPropagation();
   if (hoveredSpotId != null) openBidModal(hoveredSpotId);
 });
-// Keep pill visible while mouse hovers it
+// Keep pill visible while mouse hovers over it (or its info card / button).
 pillEl.addEventListener("pointerleave", (e) => {
   // If leaving pill but not going back onto the canvas, hide
-  if (e.relatedTarget !== canvasEl) {
+  if (e.relatedTarget !== canvasEl && !(pillEl.contains && pillEl.contains(e.relatedTarget))) {
     hoveredSpotId = null;
     pillEl.hidden = true;
   }
