@@ -4,9 +4,11 @@
 
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
+// bottle-slim.glb is meshopt-compressed — MeshoptDecoder must be wired in
+// or GLTFLoader will throw KHR_mesh_quantization/meshopt errors.
+import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
 import { createClient } from "@supabase/supabase-js";
 
 // ---------- Supabase (reuses commit.cash's project; scoped to bmb_* tables) ----------
@@ -25,19 +27,6 @@ const STORAGE_KEY = "bmb.state.v7";
 const AUCTION_END = Date.now() + 12 * 86400 * 1000 + 14 * 3600 * 1000;
 const MIN_INCREMENT = 1;
 const STARTING_BID = 1;
-
-// ---------- Bottle geometry constants (SHARED between placeholder + real GLB) ----------
-// These are the target dimensions the FINAL bottle renders at. Both the
-// placeholder and the real GLB normalize to them, so:
-//   - the camera is framed ONCE at boot and never jumps when the GLB lands
-//   - the stickers sit at the same world Y / radius before and after the swap
-//   - the placeholder has the same silhouette as the real bottle
-// Height ~ Hydro-Flask 21oz (2.5 : 1 h:d ratio).
-const TARGET_TOTAL_HEIGHT = 0.62;                 // union bbox (body + cap) height
-const TARGET_BODY_HEIGHT  = TARGET_TOTAL_HEIGHT * 0.86;  // body ≈ 86% of total (cap = 14%)
-const TARGET_BODY_RADIUS  = TARGET_TOTAL_HEIGHT / 5.0;   // 2.5:1 h:d → radius = h/5
-const TARGET_BODY_CENTERY = -TARGET_TOTAL_HEIGHT * 0.07; // body center sits slightly below origin
-const TARGET_CAP_HEIGHT   = TARGET_TOTAL_HEIGHT - TARGET_BODY_HEIGHT; // whatever's left
 
 // 11 stickers (user OK'd going past 10 to restore the below-spot-4 tile).
 //  - Spot 1:  LONG horizontal top banner (front, taller)
@@ -158,193 +147,28 @@ function setDebug(text, opts = {}) {
 // Resize
 function resize() {
   const rect = canvasEl.getBoundingClientRect();
-  // Guard: if the canvas hasn't laid out yet (0×0), don't push a dead
-  // framebuffer to WebGL — a subsequent ResizeObserver tick will catch us up
-  // once layout completes. Without this guard the very first frame would set
-  // renderer to 0×0 and camera.aspect to NaN.
-  if (!rect.width || !rect.height) return;
   renderer.setSize(rect.width, rect.height, false);
   camera.aspect = rect.width / rect.height;
   camera.updateProjectionMatrix();
 }
 window.addEventListener("resize", resize);
-// A canvas inside a flexbox column can size independently of the window (image
-// loads shove things around, fonts swap in, etc.) — window "resize" alone is
-// not enough. ResizeObserver fires whenever the canvas element itself changes
-// dimensions, so we always end up with a live framebuffer.
-if (typeof ResizeObserver !== "undefined") {
-  const ro = new ResizeObserver(() => resize());
-  ro.observe(canvasEl);
-}
 
 // ---------- Load model ----------
 let bottleMesh = null;
 let stickerMeshes = [];
 let bodyGeom = null; // { radius, height, centerY }
-let placeholderGroup = null;   // procedural cylinder shown until the GLB lands
-let bottomCap = null;          // recreated with placeholder AND with real bottle
-
-// Frame the camera ONCE from the shared target constants. Both the placeholder
-// and the real bottle render at these dimensions, so the camera never needs to
-// re-frame when the GLB lands (no jump, no jitter).
-function frameCameraOnce() {
-  // The body is centered at TARGET_BODY_CENTERY, but the CAP sits ABOVE
-  // the body's top edge. So the true midpoint of the whole bottle (body +
-  // cap) is shifted up by ~cap_height/2. Framing to body-center alone
-  // clips the cap off the top of the view (the "no cap" bug from image 76).
-  const fullMidY  = TARGET_BODY_CENTERY + TARGET_CAP_HEIGHT / 2;
-  const halfSpan  = (TARGET_BODY_HEIGHT + TARGET_CAP_HEIGHT) / 2;
-  const fovRad = camera.fov * Math.PI / 180;
-  const rect = canvasEl.getBoundingClientRect();
-  const aspect = Math.max(0.4, (rect.width || 1) / (rect.height || 1));
-  const distForHeight = halfSpan / Math.tan(fovRad / 2);
-  const distForWidth  = TARGET_BODY_RADIUS / Math.tan(fovRad / 2) / aspect;
-  let distance = Math.max(distForHeight, distForWidth) * 1.20;   // 1.20 headroom so nothing kisses the edge
-  if (!Number.isFinite(distance) || distance <= 0) distance = 1.5;
-  const startTheta = SPOT_CONFIG[0].theta;
-  camera.position.set(
-    distance * Math.cos(startTheta),
-    fullMidY + halfSpan * 0.08,
-    distance * Math.sin(startTheta)
-  );
-  controls.target.set(0, fullMidY, 0);
-  controls.minDistance = distance * 0.45;
-  controls.maxDistance = distance * 1.9;
-  controls.update();
-}
-
-// Instant-on placeholder: proportioned to match the real bottle's final scale
-// EXACTLY (same body height, radius, centerY, cap height). The user sees a
-// simple silver cylinder-bottle with the correct silhouette; when the GLB
-// lands the swap is atomic (same frame) and the stickers do not move.
-function mountPlaceholder() {
-  if (placeholderGroup) return;
-  const silverMat = new THREE.MeshStandardMaterial({
-    color: 0xdcdcdc,
-    metalness: 1.0,
-    roughness: 0.14,
-    envMapIntensity: 1.4,
-  });
-  placeholderGroup = new THREE.Group();
-
-  // Water-bottle silhouette via LatheGeometry — body cylinder that rounds off
-  // into a shoulder and neck, exactly like a Hydro-Flask-style bottle. This
-  // reads as "a water bottle" instantly instead of a soda can.
-  const R = TARGET_BODY_RADIUS;
-  const H = TARGET_BODY_HEIGHT;
-  const yBot = TARGET_BODY_CENTERY - H / 2;
-  const yTop = TARGET_BODY_CENTERY + H / 2;
-  const profile = [
-    new THREE.Vector2(R * 0.08, yBot),                 // bottom center (nearly closed)
-    new THREE.Vector2(R * 0.98, yBot + H * 0.015),     // rounded bottom edge
-    new THREE.Vector2(R,         yBot + H * 0.04),     // reach full radius
-    new THREE.Vector2(R,         yBot + H * 0.82),     // straight barrel
-    new THREE.Vector2(R * 0.93,  yBot + H * 0.88),     // shoulder start
-    new THREE.Vector2(R * 0.78,  yBot + H * 0.93),     // shoulder curve
-    new THREE.Vector2(R * 0.58,  yBot + H * 0.98),     // neck top
-    new THREE.Vector2(R * 0.55,  yTop),                 // neck flat
-  ];
-  const bodyLathe = new THREE.Mesh(new THREE.LatheGeometry(profile, 64), silverMat);
-  placeholderGroup.add(bodyLathe);
-
-  // Dark textured screw-cap on top — chunkier and slightly wider than the
-  // neck so it reads as a real cap, not a cork.
-  const capH   = TARGET_CAP_HEIGHT;
-  const capR   = R * 0.62;
-  const capMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, metalness: 0.6, roughness: 0.45 });
-  const cap = new THREE.Mesh(
-    new THREE.CylinderGeometry(capR, capR, capH * 0.82, 48),
-    capMat
-  );
-  cap.position.y = yTop + capH * 0.41;
-  placeholderGroup.add(cap);
-  // Small brim ring where cap meets neck
-  const brim = new THREE.Mesh(
-    new THREE.CylinderGeometry(capR * 1.05, capR * 1.05, capH * 0.12, 48),
-    capMat
-  );
-  brim.position.y = yTop + capH * 0.06;
-  placeholderGroup.add(brim);
-
-  scene.add(placeholderGroup);
-  // Body cylinder alias so downstream code that expects a cylinder-like proxy
-  // (raycast target, taper detection) still works with the lathe silhouette.
-  const bodyCyl = bodyLathe;
-
-  // Give raycasts + sticker taper-detection a target that MATCHES the real
-  // bottle's final radius / height / centerY exactly.
-  bottleMesh = bodyCyl;
-  bodyGeom = {
-    radius:  TARGET_BODY_RADIUS,
-    height:  TARGET_BODY_HEIGHT,
-    centerY: TARGET_BODY_CENTERY,
-  };
-
-  // Bottom disc so stickers on the back don't peek through the underside
-  bottomCap = new THREE.Mesh(
-    new THREE.CircleGeometry(TARGET_BODY_RADIUS, 48),
-    silverMat
-  );
-  bottomCap.rotation.x = Math.PI / 2;
-  bottomCap.position.y = TARGET_BODY_CENTERY - TARGET_BODY_HEIGHT / 2;
-  scene.add(bottomCap);
-
-  placeholderGroup.updateMatrixWorld(true);
-
-  // Camera framing + stickers use the SAME target constants — no drift.
-  frameCameraOnce();
-  buildStickers();
-  resize();
-}
-
-function unmountPlaceholder() {
-  if (!placeholderGroup) return;
-  scene.remove(placeholderGroup);
-  placeholderGroup.traverse(o => {
-    if (o.geometry) o.geometry.dispose();
-    if (o.material) o.material.dispose();
-  });
-  placeholderGroup = null;
-  // NOTE: caller owns the bottomCap swap. Do NOT touch bottomCap or
-  // stickerMeshes here — the atomic swap in the GLB callback replaces them
-  // in one operation so the render loop never sees an intermediate state.
-}
-
-// Kick placeholder in on the next frame — deferring by one rAF guarantees the
-// browser has laid the canvas out at least once, so canvasEl.getBoundingClientRect()
-// returns real dimensions instead of 0×0. If we mount synchronously at module
-// load, resize() inside mountPlaceholder gets called with 0×0 and the very
-// first WebGL framebuffer is dead until the user resizes the window.
-requestAnimationFrame(() => mountPlaceholder());
 
 const loader = new GLTFLoader();
-// bottle-slim.glb is meshopt-compressed — MeshoptDecoder must be wired in.
 loader.setMeshoptDecoder(MeshoptDecoder);
 loader.load(MODEL_URL, (gltf) => {
-  // Real GLB just landed. Build the real bottle root INVISIBLE first, wire up
-  // stickers + bottom cap against its final dimensions, THEN do a single atomic
-  // swap: remove placeholder, reveal real root, replace stickers + bottomCap.
-  // The render loop between here and the swap only ever sees a fully-built
-  // scene — no giant floating stickers.
   const root = gltf.scene;
-  root.visible = false;
   scene.add(root);
 
   // Find the "Water Bottle_5" node — it contains BOTH the body mesh (Object_13, tall)
   // and its cap top (Object_14). Keep everything under this node visible; hide the
   // stand / duplicate bottles that live elsewhere in the scene.
-  // Reset bottleMesh — it's still pointing at the placeholder cylinder until we
-  // assign the real GLB body mesh below, and the traverse loop's "tallest mesh"
-  // comparison would otherwise measure against the placeholder.
-  bottleMesh = null;
   const bodyRoot = findNodeByName(root, BODY_NODE_NAME);
   const keepMeshes = new Set();
-  // The Water Bottle_5 sub-tree contains the body mesh (tall) and the screw-cap
-  // mesh (short, sits on top). Separately track the cap so we can give it a
-  // DIFFERENT material — otherwise, painting everything with the same silver
-  // makes the cap visually merge into the body (that was the "no cap on real
-  // bottle" bug from image #76: cap is there, but chrome-on-chrome).
-  let capMesh = null;
   if (bodyRoot) {
     bodyRoot.traverse((child) => {
       if (child.isMesh && child.geometry) {
@@ -356,11 +180,6 @@ loader.load(MODEL_URL, (gltf) => {
           bottleMesh = child;
         }
       }
-    });
-    // Anything under Water Bottle_5 that isn't the body IS the cap (in this
-    // GLB there's exactly one such mesh: Object_14).
-    bodyRoot.traverse((child) => {
-      if (child.isMesh && child !== bottleMesh) capMesh = child;
     });
   }
   // Fallback: tallest mesh anywhere
@@ -385,119 +204,97 @@ loader.load(MODEL_URL, (gltf) => {
     roughness: 0.12,
     envMapIntensity: 1.4,
   });
-  // Dark screw-cap — matches the placeholder's cap so the visual doesn't jump
-  // when the real GLB swaps in. Softer highlight than the mirror body, so the
-  // cap reads as a distinct dark ring on top of the bottle.
-  const capMat = new THREE.MeshStandardMaterial({
-    color: 0x1a1a1a,
-    metalness: 0.6,
-    roughness: 0.45,
-    envMapIntensity: 1.0,
-  });
   root.traverse((child) => {
     if (!child.isMesh) return;
     if (!keepMeshes.has(child)) {
       child.visible = false;
       hiddenCount++;
-      return;
     }
-    const isCap = (child === capMesh);
-    const mat = isCap ? capMat : silverMat;
     if (Array.isArray(child.material)) {
-      child.material = child.material.map(() => mat);
+      child.material = child.material.map(() => silverMat);
     } else if (child.material) {
-      child.material = mat;
+      child.material = silverMat;
     }
   });
 
-  // Normalize the GLB to the SHARED target dimensions so it lands at exactly
-  // the same size/position as the placeholder. Steps:
-  //   1) union bbox on original scale
-  //   2) scale so BODY mesh height == TARGET_BODY_HEIGHT
-  //      (not the union — the placeholder's body cylinder is TARGET_BODY_HEIGHT,
-  //      so matching body-to-body keeps stickers glued to the same world Y range)
-  //   3) widen X/Z so body radius == TARGET_BODY_RADIUS
-  //   4) recenter so body center sits at TARGET_BODY_CENTERY
+  // Union bbox of ALL kept meshes (body + cap) for correct total-height framing
   bottleMesh.updateMatrixWorld(true);
-  const bodyPre = new THREE.Box3().setFromObject(bottleMesh);
-  const bodyPreSize = bodyPre.getSize(new THREE.Vector3());
-  const heightScale = TARGET_BODY_HEIGHT / bodyPreSize.y;
-  const preBodyRadius = Math.max(bodyPreSize.x, bodyPreSize.z) / 2;
-  const widthScale  = TARGET_BODY_RADIUS / preBodyRadius;
+  const unionPre = new THREE.Box3();
+  keepMeshes.forEach(m => unionPre.expandByObject(m));
+  const preSize = unionPre.getSize(new THREE.Vector3());
+
+  // Normalize total height, THEN widen X/Z so the bottle isn't twiggy.
+  // The .glb bottle has ratio 3.4:1 (very tall/thin). A real Hydro Flask-style
+  // bottle is more like 2.6:1, so we squash by widening horizontally.
+  const targetTotalHeight = 0.62;
+  const heightScale = targetTotalHeight / preSize.y;
+  const widthScale  = heightScale * 1.60;  // 60% chunkier on X/Z (thicker barrel)
   root.scale.set(widthScale, heightScale, widthScale);
   root.updateMatrixWorld(true);
 
-  // Recenter so BODY center → (0, TARGET_BODY_CENTERY, 0)
-  const bodyPost = new THREE.Box3().setFromObject(bottleMesh);
-  const bCenter = bodyPost.getCenter(new THREE.Vector3());
-  root.position.x -= bCenter.x;
-  root.position.z -= bCenter.z;
-  root.position.y += (TARGET_BODY_CENTERY - bCenter.y);
+  // Recompute union bbox after non-uniform scaling
+  const union = new THREE.Box3();
+  keepMeshes.forEach(m => union.expandByObject(m));
+  const uSize = union.getSize(new THREE.Vector3());
+  const uCenter = union.getCenter(new THREE.Vector3());
+
+  // Recenter whole model so its union-bbox center is at origin
+  root.position.sub(uCenter);
   root.updateMatrixWorld(true);
 
-  // Final measured bodyGeom (should match TARGET_* within float error).
-  const bodyFinal = new THREE.Box3().setFromObject(bottleMesh);
-  const bfSize = bodyFinal.getSize(new THREE.Vector3());
-  const bfCenter = bodyFinal.getCenter(new THREE.Vector3());
-  const nextBodyGeom = {
-    radius: Math.max(bfSize.x, bfSize.z) / 2,
-    height: bfSize.y,
-    centerY: bfCenter.y,
+  // Now measure the BODY mesh (for sticker placement) in the recentered world
+  const bodyBox = new THREE.Box3().setFromObject(bottleMesh);
+  const bSize = bodyBox.getSize(new THREE.Vector3());
+  const bCenter = bodyBox.getCenter(new THREE.Vector3());
+  bodyGeom = {
+    radius: Math.max(bSize.x, bSize.z) / 2,
+    height: bSize.y,
+    centerY: bCenter.y,
   };
 
-  // Build the new bottom cap disc AND the new stickers OFF-SCENE. We swap
-  // them in atomically below so the render loop never sees the placeholder
-  // gone with old stickers still visible.
-  const nextBottomCap = new THREE.Mesh(
-    new THREE.CircleGeometry(nextBodyGeom.radius, 48),
+  // Build 12 curved sticker overlays on the body
+  buildStickers();
+
+  // Frame from UNION bbox (body + cap) so the cap fits in view too
+  const framingBox = new THREE.Box3();
+  keepMeshes.forEach(m => framingBox.expandByObject(m));
+  const fSize = framingBox.getSize(new THREE.Vector3());
+  const fCenter = framingBox.getCenter(new THREE.Vector3());
+  const fovRad = camera.fov * Math.PI / 180;
+  const rect = canvasEl.getBoundingClientRect();
+  const aspect = Math.max(0.4, (rect.width || 1) / (rect.height || 1));
+  const distForHeight = (fSize.y / 2) / Math.tan(fovRad / 2);
+  const distForWidth  = (Math.max(fSize.x, fSize.z) / 2) / Math.tan(fovRad / 2) / aspect;
+  const distance = Math.max(distForHeight, distForWidth) * 1.15;
+  // Start camera on spot #1's axis so the spin naturally reveals #1 first.
+  const startTheta = SPOT_CONFIG[0].theta;
+  camera.position.set(
+    distance * Math.cos(startTheta),
+    fCenter.y + fSize.y * 0.05,
+    distance * Math.sin(startTheta)
+  );
+  controls.target.set(0, fCenter.y, 0);
+  controls.minDistance = distance * 0.45;
+  controls.maxDistance = distance * 1.9;
+  controls.update();
+
+  // Add a bottom cap disc — this .glb's body mesh is open at the bottom, so
+  // looking up from below revealed the sticker on the far side through the void.
+  const bottomCap = new THREE.Mesh(
+    new THREE.CircleGeometry(bodyGeom.radius, 48),
     silverMat
   );
-  nextBottomCap.rotation.x = Math.PI / 2;
-  nextBottomCap.position.y = nextBodyGeom.centerY - nextBodyGeom.height / 2;
-
-  // Point sticker-builder helpers at the new bodyGeom BEFORE calling
-  // buildStickers(). buildStickers() reads module-level bodyGeom + bottleMesh,
-  // and raycasts against bottleMesh — but bottleMesh at this point is still
-  // the placeholder cylinder. We swap those first, then build.
-  bodyGeom = nextBodyGeom;
-  // bottleMesh already points at the GLB body mesh (assigned in the traverse
-  // above). Raycasts against it will now hit the real geometry.
-
-  // === ATOMIC SWAP (one JS turn, no render frame in between) ===
-  // 1. Tear down old sticker meshes
-  stickerMeshes.forEach(m => {
-    scene.remove(m);
-    m.geometry.dispose();
-    m.material.map?.dispose();
-    m.material.dispose();
-  });
-  stickerMeshes = [];
-  // 2. Tear down placeholder + old bottom cap
-  const oldBottomCap = bottomCap;
-  bottomCap = null;
-  unmountPlaceholder();
-  if (oldBottomCap) {
-    scene.remove(oldBottomCap);
-    oldBottomCap.geometry.dispose();
-    oldBottomCap.material.dispose();
-  }
-  // 3. Reveal the real bottle + attach the new bottom cap
-  root.visible = true;
-  bottomCap = nextBottomCap;
+  bottomCap.rotation.x = Math.PI / 2;                 // face downward
+  bottomCap.position.y = bodyGeom.centerY - bodyGeom.height / 2;
   scene.add(bottomCap);
-  // 4. Build fresh stickers against the real body geometry
-  buildStickers();
-  // 5. Ensure framebuffer is sized to current canvas (in case it changed)
+
   resize();
-  // Camera framing is NOT touched here — frameCameraOnce() at boot already
-  // set it based on the same target constants the real bottle now matches.
 
   setDebug(
     `body mesh: ${bottleMesh?.name}\n` +
-    `cap mesh: ${capMesh?.name || "(none)"}\n` +
     `hidden meshes: ${hiddenCount}\n` +
     `radius: ${bodyGeom.radius.toFixed(3)}  height: ${bodyGeom.height.toFixed(3)}\n` +
-    `centerY: ${bodyGeom.centerY.toFixed(3)}\n` +
+    `centerY: ${bodyGeom.centerY.toFixed(3)}  camera dist: ${distance.toFixed(3)}\n` +
     `stickers: ${stickerMeshes.length}/${TOTAL}`
   );
 }, undefined, (err) => {
@@ -632,17 +429,15 @@ function makeStickerTexture(spotId, price, taken, geomAspect = 1.35, opts = {}) 
     //     color language as the empty stickers).
     //   - Smaller "Outbid · $N" line beneath, same cream color.
 
-    // Taken stickers are TALLER (1.35× — see buildStickers). Ratios below
-    // are of the TALLER canvas, chosen so that:
-    //   - paper card physical size ≈ same as empty sticker (0.78 × 1/1.35 = 0.578)
-    //   - brand + outbid text physical size ≈ 70% bigger than the old cramped layout
+    // Image dominates: paper card takes ~78% of sticker height so the logo
+    // reads even at a distance. Brand + outbid text sit tight beneath.
     const inner  = { x: pad, y: pad, w: c.width - pad * 2, h: c.height - pad * 2 };
-    const cardH  = Math.round(inner.h * 0.58);
-    const brandSize   = Math.round(inner.h * 0.14);
-    const outbidSize  = Math.round(inner.h * 0.10);
-    const gapTextTop  = Math.round(inner.h * 0.04);
+    const cardH  = Math.round(inner.h * 0.78);
+    const brandSize   = Math.round(inner.h * 0.11);
+    const outbidSize  = Math.round(inner.h * 0.08);
+    const gapTextTop  = Math.round(inner.h * 0.025);
     const brandY      = inner.y + cardH + gapTextTop + brandSize * 0.55;
-    const outbidY     = brandY + brandSize * 0.60 + outbidSize * 0.80;
+    const outbidY     = brandY + brandSize * 0.55 + outbidSize * 0.75;
 
     // Paper card behind logo (catches transparent-PNG artwork)
     ctx.fillStyle = paper;
@@ -736,17 +531,8 @@ function buildStickers() {
     const wMul = cfg.wMul ?? cfg.sizeMul ?? 1.0;
     const hMul = cfg.hMul ?? cfg.sizeMul ?? 1.0;
     const arcAngle = baseArc * wMul;
-    // Taken stickers grow taller so the brand + outbid text has real room
-    // WITHOUT shrinking the paper card that holds the logo. The extra
-    // height extends DOWNWARD onto the bottle (top edge stays put), so
-    // the card sits where an empty sticker's card would.
-    const TAKEN_STRETCH = 1.35;
-    const baseStickerH = baseHeight * hMul;
-    const stickerH = taken ? baseStickerH * TAKEN_STRETCH : baseStickerH;
-    const yWorldEmpty = bodyGeom.centerY + cfg.y * bandHalfHeight;
-    const yWorld = taken
-      ? yWorldEmpty - (stickerH - baseStickerH) / 2
-      : yWorldEmpty;
+    const stickerH = baseHeight * hMul;
+    const yWorld   = bodyGeom.centerY + cfg.y * bandHalfHeight;
 
     // Local radius at this sticker's exact position (handles taper)
     const localR = localRadiusAt(cfg.theta, yWorld);
@@ -804,32 +590,9 @@ canvasEl.addEventListener("click", (e) => {
   if (hit) openBidModal(hit.userData.spotId);
 });
 
-// Touch devices have no hover — a tap fires pointermove briefly, then
-// pointerup dismisses the hover pill before the user can react. On touch,
-// bypass the pill entirely and open the modal directly on pointerup
-// (guarded by didDrag so scrolling / spinning the bottle doesn't fire a bid).
-canvasEl.addEventListener("pointerup", (e) => {
-  if (e.pointerType !== "touch") return;
-  if (didDrag) return;
-  const hit = raycastSticker(e.clientX, e.clientY);
-  if (hit) {
-    // Prevent the synthetic mouse "click" that follows a touch from also
-    // triggering the click handler above (would double-open the modal).
-    e.preventDefault();
-    // Hide any lingering hover pill from the tap.
-    hoveredSpotId = null;
-    if (pillEl) pillEl.hidden = true;
-    openBidModal(hit.userData.spotId);
-  }
-});
-
 // Hover → move & show the Outbid pill at the hovered sticker's screen position
 canvasEl.addEventListener("pointermove", (e) => {
   if (e.buttons > 0) return;  // ignore while dragging
-  // Skip the hover pill on touch devices — they get direct tap-to-open above.
-  // Without this, tapping fires a pointermove with pointerType=touch, briefly
-  // shows the pill, then pointerup dismisses it before the user can react.
-  if (e.pointerType === "touch") return;
   const hit = raycastSticker(e.clientX, e.clientY);
   if (!hit) {
     hoveredSpotId = null;
@@ -1572,33 +1335,13 @@ setInterval(syncFromSupabase, 20 * 1000);
     if (outcome === "success") {
       // Webhook usually lands within a second; give it a few tries before
       // giving up. syncFromSupabase() rebuilds the stickers + grid + totals.
-      // Also snapshot the pre-sync state so we can detect the NEW row and
-      // pass it to the share modal.
-      const preSyncSnapshot = snapshotBidState();
       let tries = 0;
-      let opened = false;
-      const openWithBest = (reason) => {
-        if (opened) return;
-        opened = true;
-        openShareModal(pickFreshBid(preSyncSnapshot));
-        try { console.info("[bmb] share modal opened:", reason); } catch (_) {}
-      };
-      const poll = async () => {
-        if (typeof syncFromSupabase === "function") {
-          try { await syncFromSupabase(); } catch (_) {}
-        }
+      const poll = () => {
+        if (typeof syncFromSupabase === "function") syncFromSupabase();
         tries += 1;
-        // As soon as we see a fresh row (newer/higher than the snapshot),
-        // pop the modal and stop polling — no reason to keep spamming.
-        const fresh = pickFreshBid(preSyncSnapshot);
-        if (fresh) { openWithBest("sync-detected-new-row"); return; }
         if (tries < 6) setTimeout(poll, 1500);
       };
       poll();
-      // Hard fallback: even if the webhook is slow / silent, the modal
-      // still opens within 4s using best-guess data. Better than a lonely
-      // toast when the buyer just paid us.
-      setTimeout(() => openWithBest("timeout-fallback"), 4000);
     }
 
     setTimeout(() => {
@@ -1608,175 +1351,5 @@ setInterval(syncFromSupabase, 20 * 1000);
     }, 4500);
   } catch (err) {
     console.warn("[bmb] checkout-return toast failed:", err);
-  }
-
-  // -------- share modal wiring (scoped inside the IIFE) --------
-  const SHARE_URL = "https://brand-my-bottle.pages.dev";
-
-  // Snapshot spot amounts + timestamps BEFORE we sync so we can detect the
-  // one that changed (or newly appeared) as a result of this checkout.
-  function snapshotBidState() {
-    const snap = {};
-    try {
-      if (typeof state !== "undefined" && state?.spots) {
-        for (const [id, s] of Object.entries(state.spots)) {
-          if (s) snap[id] = { amount: s.amount || 0, at: s.at || 0 };
-        }
-      }
-    } catch (_) {}
-    return snap;
-  }
-
-  // Find the bid most likely to be the one we just paid for. Priority:
-  //   1) a spot whose amount went UP since the snapshot
-  //   2) a spot that didn't exist before but does now
-  //   3) fall back to the newest bid overall
-  function pickFreshBid(preSnap) {
-    try {
-      if (typeof state === "undefined" || !state?.spots) return null;
-      let best = null;
-      let bestScore = -Infinity;
-      for (const [id, s] of Object.entries(state.spots)) {
-        if (!s) continue;
-        const prev = preSnap[id];
-        const amount = s.amount || 0;
-        const at = s.at || 0;
-        let score = at; // newer wins by default
-        if (!prev) score += 1e15;                     // brand new spot: strong signal
-        else if (amount > prev.amount) score += 5e14; // outbid: also strong
-        else if (at <= (prev.at || 0)) continue;      // unchanged — skip
-        if (score > bestScore) { bestScore = score; best = { id: Number(id), spot: s }; }
-      }
-      return best;
-    } catch (_) { return null; }
-  }
-
-  function openShareModal(best) {
-    const modal = document.getElementById("share-modal");
-    if (!modal) return;
-
-    // Resolve spot meta + amount for the summary line.
-    const spotId = best?.id || null;
-    const brand  = best?.spot?.brand || "";
-    const amount = best?.spot?.amount || 0;
-    const meta = spotId && typeof SPOT_META !== "undefined"
-      ? (SPOT_META[spotId] || { name: `Spot ${spotId}` })
-      : { name: "your spot" };
-
-    // Title + summary
-    const titleEl = document.getElementById("share-title");
-    const subEl   = document.getElementById("share-sub");
-    if (titleEl) titleEl.textContent = brand ? `You're in, ${brand}!` : "You're in!";
-    if (subEl) {
-      const parts = [];
-      if (spotId) parts.push(`Spot ${spotId}`);
-      if (meta?.name) parts.push(meta.name);
-      if (amount) parts.push(`$${Number(amount).toLocaleString()}`);
-      subEl.textContent = parts.length ? parts.join(" · ") : "Your spot is locked in";
-    }
-
-    // Compose share text — keep it under ~240 chars to be safe.
-    const spotLabel = spotId ? `Spot ${spotId}` : "a spot";
-    const priceTail = amount ? ` for $${Number(amount).toLocaleString()}` : "";
-    const tweetText =
-      `Just claimed ${spotLabel} on Brand My Bottle${priceTail}. ` +
-      `My logo rides on this bottle for the year.`;
-    const shareText =
-      `Just claimed ${spotLabel} on Brand My Bottle${priceTail}. ` +
-      `My logo rides on this bottle for the year — ${SHARE_URL}`;
-
-    // Post-on-X link. We deliberately omit the @brandmybottle mention —
-    // the handle isn't confirmed real and mis-tagging is worse than nothing.
-    const xLink = document.getElementById("share-x");
-    if (xLink) {
-      const href = "https://twitter.com/intent/tweet"
-        + "?text=" + encodeURIComponent(tweetText)
-        + "&url="  + encodeURIComponent(SHARE_URL);
-      xLink.setAttribute("href", href);
-    }
-
-    // Native share (mobile mainly) — hide if the API isn't there.
-    const nativeBtn = document.getElementById("share-native");
-    if (nativeBtn) {
-      if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
-        nativeBtn.hidden = false;
-        nativeBtn.onclick = async () => {
-          try {
-            await navigator.share({
-              title: "Brand My Bottle",
-              text: shareText,
-              url: SHARE_URL,
-            });
-          } catch (err) {
-            if (err && err.name === "AbortError") return; // user dismissed — fine
-            // Fall back to copy on unexpected failure so the click still did something.
-            try { await navigator.clipboard.writeText(SHARE_URL); } catch (_) {}
-          }
-        };
-      } else {
-        nativeBtn.hidden = true;
-      }
-    }
-
-    // Copy link — swap label to "Copied ✓" for 2s.
-    const copyBtn   = document.getElementById("share-copy");
-    const copyLabel = document.getElementById("share-copy-label");
-    if (copyBtn && copyLabel) {
-      copyBtn.onclick = async () => {
-        let ok = false;
-        try {
-          if (navigator.clipboard && window.isSecureContext) {
-            await navigator.clipboard.writeText(SHARE_URL);
-            ok = true;
-          } else {
-            const ta = document.createElement("textarea");
-            ta.value = SHARE_URL;
-            ta.setAttribute("readonly", "");
-            ta.style.position = "fixed";
-            ta.style.top = "-1000px";
-            document.body.appendChild(ta);
-            ta.select();
-            ok = document.execCommand("copy");
-            document.body.removeChild(ta);
-          }
-        } catch (_) { ok = false; }
-        copyLabel.textContent = ok ? "Copied ✓" : "Press Ctrl/⌘+C";
-        copyBtn.classList.toggle("share-btn-copied", ok);
-        setTimeout(() => {
-          copyLabel.textContent = "Copy link";
-          copyBtn.classList.remove("share-btn-copied");
-        }, 2000);
-      };
-    }
-
-    // Close wiring
-    let autoCloseTimer = null;
-    const cancelAutoClose = () => {
-      if (autoCloseTimer) { clearTimeout(autoCloseTimer); autoCloseTimer = null; }
-    };
-    const close = () => {
-      cancelAutoClose();
-      modal.hidden = true;
-      modal.removeEventListener("click", onBackdrop);
-      document.removeEventListener("keydown", onKey);
-    };
-    const onBackdrop = (e) => { if (e.target === modal) close(); };
-    const onKey = (e) => { if (e.key === "Escape") close(); };
-
-    const closeBtn = document.getElementById("share-close");
-    const laterBtn = document.getElementById("share-later");
-    if (closeBtn) closeBtn.onclick = close;
-    if (laterBtn) laterBtn.onclick = close;
-    modal.addEventListener("click", onBackdrop);
-    document.addEventListener("keydown", onKey);
-
-    // Any interaction cancels the auto-close so we don't yank it mid-copy.
-    ["click", "keydown"].forEach(evt => {
-      modal.addEventListener(evt, cancelAutoClose, { once: true });
-    });
-
-    modal.hidden = false;
-    // 45s auto-dismiss — nice-to-have per the spec.
-    autoCloseTimer = setTimeout(close, 45_000);
   }
 })();
