@@ -1531,6 +1531,38 @@ syncFromSupabase();
 // Poll every 20s for competing bids
 setInterval(syncFromSupabase, 20 * 1000);
 
+// ---------- DataFast map: lazy-mount the embed on scroll-in ----------
+// The <div id="stats-embed"> at the bottom of the page holds the iframe URL
+// in data-src. We only inject the iframe when the section actually scrolls
+// into view — no extra network request on initial page load, no rendering
+// cost until the user asks for it.
+(function initStatsLazyMount() {
+  const el = document.getElementById("stats-embed");
+  if (!el) return;
+  const src = el.dataset.src;
+  if (!src) return;
+  let mounted = false;
+  function mount() {
+    if (mounted) return;
+    mounted = true;
+    const frame = document.createElement("iframe");
+    frame.src = src;
+    frame.loading = "lazy";
+    frame.referrerPolicy = "no-referrer-when-downgrade";
+    frame.title = "Worldwide traffic to iwantabottle.com";
+    frame.setAttribute("allow", "fullscreen");
+    el.appendChild(frame);
+    el.classList.add("mounted");
+  }
+  if (!("IntersectionObserver" in window)) { mount(); return; }
+  const io = new IntersectionObserver((entries) => {
+    for (const entry of entries) {
+      if (entry.isIntersecting) { mount(); io.disconnect(); break; }
+    }
+  }, { rootMargin: "200px 0px" });   // start loading 200px before it hits the viewport
+  io.observe(el);
+})();
+
 // ---------- Live visitor heartbeat ----------
 // Every open tab gets an opaque uuid persisted in localStorage. Every 30s we
 // POST it to the bmb-beat Edge Function, which upserts the row and returns the
