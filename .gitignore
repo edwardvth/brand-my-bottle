@@ -7,7 +7,5 @@ node_modules/
 supabase/.temp/
 supabase/.branches/
 dist/
-# Source GLB (25MB, only used by scripts/build-slim-bottle.mjs to produce the shipped bottle-slim.glb)
-stainless_steel_water_bottle.glb
 # Intermediate build artifact
 bottle-optimized.glb
