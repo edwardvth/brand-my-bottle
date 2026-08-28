@@ -9,34 +9,39 @@ import { MeshoptEncoder } from "meshoptimizer";
 
 const INPUT  = "stainless_steel_water_bottle.glb";
 const OUTPUT = "bottle-slim.glb";
-const KEEP_NODE = "Water Bottle_5";
+// Keep BOTH the bottle body node AND the chunky screw-cap node. The cap is a
+// separate top-level node in this GLB (Object_14 under Water Bottle_5 is only
+// a thin neck-collar ring — not the actual cap the user expects to see).
+const KEEP_NODES = ["Water Bottle_5", "Bottle Cap _3"];
 
 const io = new NodeIO().registerExtensions(KHRONOS_EXTENSIONS);
 const doc = await io.read(INPUT);
 const root = doc.getRoot();
 
-// 1) Find the KEEP node + all descendants (which nodes to keep in the scene).
+// 1) Find EVERY KEEP node + all descendants.
 const scene = root.listScenes()[0];
-let keepRoot = null;
-scene.traverse((n) => { if (n.getName() === KEEP_NODE) keepRoot = n; });
-if (!keepRoot) throw new Error(`Could not find node ${KEEP_NODE}`);
+const keepRoots = [];
+scene.traverse((n) => {
+  if (KEEP_NODES.includes(n.getName())) keepRoots.push(n);
+});
+if (keepRoots.length !== KEEP_NODES.length) {
+  const found = keepRoots.map((n) => n.getName());
+  const missing = KEEP_NODES.filter((n) => !found.includes(n));
+  throw new Error(`Could not find node(s): ${missing.join(", ")}`);
+}
 
-const keepNodes = new Set([keepRoot]);
-keepRoot.traverse((n) => keepNodes.add(n));
+const keepNodes = new Set(keepRoots);
+for (const kr of keepRoots) kr.traverse((n) => keepNodes.add(n));
 
-// 2) Detach every scene child except the keep root's TOP-LEVEL ancestor chain
-//    (so its transforms stay), and remove sibling nodes entirely.
-//    Simplest reliable approach: walk all nodes; if not in keepNodes and not an
-//    ancestor of keepRoot, detach it.
+// 2) Detach every scene child except the keep roots + their ancestor chains.
 const ancestors = new Set();
-{
-  let n = keepRoot.getParentNode?.() || null;
+for (const kr of keepRoots) {
+  let n = kr.getParentNode?.() || null;
   while (n) { ancestors.add(n); n = n.getParentNode?.() || null; }
 }
 // Iterate over a snapshot because we're mutating the graph.
 for (const node of root.listNodes()) {
   if (keepNodes.has(node) || ancestors.has(node)) continue;
-  // Dispose the node's mesh reference if unique to it; prune() will clean up later.
   node.dispose();
 }
 
