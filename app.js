@@ -1249,6 +1249,14 @@ async function submitBidToSupabase({ spotId, amount, brand, email, website, xHan
 }
 
 // ---------- Init ----------
+// ?reset=1 wipes local optimistic state (bids that never made it to
+// Supabase). Useful during dev — server-side data is untouched.
+if (new URLSearchParams(location.search).get("reset") === "1") {
+  localStorage.removeItem(STORAGE_KEY);
+  const clean = location.pathname + location.hash;
+  history.replaceState({}, "", clean);
+  state = loadState();
+}
 mountSpotTable();
 mountHistoryControls();
 refreshTotals();
