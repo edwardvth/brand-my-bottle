@@ -86,6 +86,12 @@
       </div>
     </section>
 
+    <!-- Page-level CTAs — sit between the bottle and the tabs -->
+    <div class="hero-cta">
+      <a href="#spots" class="hero-cta-primary" data-smooth-scroll="#spots">Get a spot</a>
+      <a href="#how" class="hero-cta-secondary" data-smooth-scroll="#how">How it works</a>
+    </div>
+
     <!-- SPOTS + HISTORY tabs -->
     <section id="spots" class="grid-section">
       <div class="tab-switcher" role="tablist">
@@ -268,5 +274,23 @@
   </div>
 
   <script type="module" src="app.js"></script>
+  <script>
+    // Nicer smooth-scroll for the page-level CTA anchors (some browsers jump
+    // abruptly on plain hash links). Progressive enhancement: if JS fails,
+    // the native anchor still works because these are real <a href="#…"> tags.
+    (function () {
+      var links = document.querySelectorAll('[data-smooth-scroll]');
+      for (var i = 0; i < links.length; i++) {
+        links[i].addEventListener('click', function (e) {
+          var target = document.querySelector(this.getAttribute('data-smooth-scroll'));
+          if (!target) return;
+          e.preventDefault();
+          target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          // Keep the URL hash in sync so back/forward + share still work.
+          if (history.pushState) history.pushState(null, '', this.getAttribute('href'));
+        });
+      }
+    })();
+  </script>
 </body>
 </html>
