@@ -716,9 +716,32 @@ canvasEl.addEventListener("click", (e) => {
   if (hit) openBidModal(hit.userData.spotId);
 });
 
+// Touch devices have no hover — a tap fires pointermove briefly, then
+// pointerup dismisses the hover pill before the user can react. On touch,
+// bypass the pill entirely and open the modal directly on pointerup
+// (guarded by didDrag so scrolling / spinning the bottle doesn't fire a bid).
+canvasEl.addEventListener("pointerup", (e) => {
+  if (e.pointerType !== "touch") return;
+  if (didDrag) return;
+  const hit = raycastSticker(e.clientX, e.clientY);
+  if (hit) {
+    // Prevent the synthetic mouse "click" that follows a touch from also
+    // triggering the click handler above (would double-open the modal).
+    e.preventDefault();
+    // Hide any lingering hover pill from the tap.
+    hoveredSpotId = null;
+    if (pillEl) pillEl.hidden = true;
+    openBidModal(hit.userData.spotId);
+  }
+});
+
 // Hover → move & show the Outbid pill at the hovered sticker's screen position
 canvasEl.addEventListener("pointermove", (e) => {
   if (e.buttons > 0) return;  // ignore while dragging
+  // Skip the hover pill on touch devices — they get direct tap-to-open above.
+  // Without this, tapping fires a pointermove with pointerType=touch, briefly
+  // shows the pill, then pointerup dismisses it before the user can react.
+  if (e.pointerType === "touch") return;
   const hit = raycastSticker(e.clientX, e.clientY);
   if (!hit) {
     hoveredSpotId = null;
