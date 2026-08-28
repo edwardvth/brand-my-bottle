@@ -719,10 +719,113 @@ function updatePillPosition() {
 function loop() {
   controls.update();
   updatePillPosition();
+  updateDevPanel();
   renderer.render(scene, camera);
   requestAnimationFrame(loop);
 }
 loop();
+
+// ---------- Dev scale panel ----------
+// Enabled when the URL has ?dev=on OR localStorage.bmb_dev === "on".
+// Once enabled, the user can orbit/zoom the bottle, then click "Save as
+// initial view" to persist the camera state to localStorage. Every
+// subsequent page load restores that exact camera position, target,
+// autoRotate=false, so the bottle loads oriented how they want.
+const DEV_VIEW_KEY = "bmb.dev.initialView";
+const DEV_ON_KEY   = "bmb.dev.on";
+(function bootDevPanel() {
+  const p = new URLSearchParams(location.search);
+  if (p.get("dev") === "on")  localStorage.setItem(DEV_ON_KEY, "on");
+  if (p.get("dev") === "off") localStorage.removeItem(DEV_ON_KEY);
+  const on = localStorage.getItem(DEV_ON_KEY) === "on";
+  const panel = document.getElementById("dev-panel");
+  if (!panel) return;
+  panel.hidden = !on;
+  if (!on) return;
+
+  const $ = (id) => document.getElementById(id);
+  const status = $("dev-status");
+  function say(msg, ms = 2200) {
+    status.textContent = msg;
+    if (ms) setTimeout(() => { if (status.textContent === msg) status.textContent = ""; }, ms);
+  }
+
+  $("dev-save").addEventListener("click", () => {
+    const cp = camera.position;
+    const t  = controls.target;
+    const view = {
+      camera: { x: cp.x, y: cp.y, z: cp.z },
+      target: { x: t.x,  y: t.y,  z: t.z },
+      // Also freeze the current autoRotate state so a manually-set angle isn't
+      // instantly overwritten by the spin.
+      autoRotate: controls.autoRotate,
+      _viewport: { w: window.innerWidth, h: window.innerHeight },
+      _at: new Date().toISOString(),
+    };
+    localStorage.setItem(DEV_VIEW_KEY, JSON.stringify(view));
+    say("Saved. Refresh to verify.");
+  });
+
+  $("dev-reset").addEventListener("click", () => {
+    localStorage.removeItem(DEV_VIEW_KEY);
+    say("Cleared. Refresh to see default.");
+  });
+
+  $("dev-copy").addEventListener("click", async () => {
+    const cp = camera.position, t = controls.target;
+    const spherical = new THREE.Spherical().setFromVector3(
+      new THREE.Vector3(cp.x - t.x, cp.y - t.y, cp.z - t.z)
+    );
+    const payload = {
+      camera: { x: +cp.x.toFixed(3), y: +cp.y.toFixed(3), z: +cp.z.toFixed(3) },
+      target: { x: +t.x.toFixed(3),  y: +t.y.toFixed(3),  z: +t.z.toFixed(3) },
+      distance:  +spherical.radius.toFixed(3),
+      azimuthDeg:  +(THREE.MathUtils.radToDeg(spherical.theta)).toFixed(1),
+      elevationDeg: +(90 - THREE.MathUtils.radToDeg(spherical.phi)).toFixed(1),
+      viewport: { w: window.innerWidth, h: window.innerHeight },
+    };
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(payload, null, 2));
+      say("Copied to clipboard.");
+    } catch {
+      say("Copy failed — check console.");
+      console.log("[bmb dev view]", payload);
+    }
+  });
+})();
+
+function updateDevPanel() {
+  const panel = document.getElementById("dev-panel");
+  if (!panel || panel.hidden) return;
+  const cp = camera.position, t = controls.target;
+  const rel = new THREE.Vector3(cp.x - t.x, cp.y - t.y, cp.z - t.z);
+  const dist = rel.length();
+  const spherical = new THREE.Spherical().setFromVector3(rel);
+  const setText = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+  setText("dev-dist", dist.toFixed(3));
+  setText("dev-az",   `${THREE.MathUtils.radToDeg(spherical.theta).toFixed(1)}°`);
+  setText("dev-el",   `${(90 - THREE.MathUtils.radToDeg(spherical.phi)).toFixed(1)}°`);
+  setText("dev-ty",   t.y.toFixed(3));
+  setText("dev-vp",   `${window.innerWidth}×${window.innerHeight}`);
+}
+
+// Attempt to restore a saved dev view — runs deferred so the GLB load has
+// already framed the camera; we then override with the saved coordinates.
+function tryApplySavedDevView() {
+  try {
+    const raw = localStorage.getItem(DEV_VIEW_KEY);
+    if (!raw) return;
+    const v = JSON.parse(raw);
+    camera.position.set(v.camera.x, v.camera.y, v.camera.z);
+    controls.target.set(v.target.x, v.target.y, v.target.z);
+    if (typeof v.autoRotate === "boolean") controls.autoRotate = v.autoRotate;
+    controls.update();
+  } catch (err) {
+    console.warn("[bmb dev] could not restore view:", err);
+  }
+}
+// Apply after next frame so it overrides the GLB-load framing.
+requestAnimationFrame(() => requestAnimationFrame(tryApplySavedDevView));
 
 // ---------- Spots table + tabs (replaces the old card grid) ----------
 // Size badge: XL for the quads + tall verticals, L for the banner, M for the

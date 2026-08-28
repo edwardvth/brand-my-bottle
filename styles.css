@@ -661,6 +661,66 @@ footer a:hover { color: var(--teal); }
 }
 
 /* ================================================================
+   DEV SCALE PANEL: top-left overlay for camera orientation tuning
+   ================================================================ */
+.dev-panel {
+  position: fixed;
+  top: 14px; left: 14px;
+  z-index: 9999;
+  min-width: 240px;
+  max-width: 280px;
+  background: rgba(11, 20, 22, 0.94);
+  color: var(--paper);
+  padding: 14px 14px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.14);
+  box-shadow: 0 12px 28px rgba(0,0,0,0.4);
+  font: 500 12px/1.35 ui-monospace, Menlo, Consolas, monospace;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+.dev-panel[hidden] { display: none; }
+.dev-panel-title {
+  font: 700 11px/1 Inter, sans-serif;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--teal-soft);
+  margin-bottom: 10px;
+}
+.dev-panel-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 3px 0;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+}
+.dev-panel-row span { color: rgba(242, 237, 226, 0.55); font-weight: 500; }
+.dev-panel-row strong { color: var(--paper); font-weight: 700; }
+.dev-panel-btns { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.dev-btn {
+  appearance: none;
+  border: 1px solid rgba(255,255,255,0.18);
+  background: transparent;
+  color: var(--paper);
+  padding: 7px 10px;
+  border-radius: 8px;
+  font: 600 12px/1 Inter, sans-serif;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+.dev-btn:hover { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.28); }
+.dev-btn-primary {
+  background: var(--teal);
+  border-color: var(--teal);
+}
+.dev-btn-primary:hover { background: var(--teal-deep); border-color: var(--teal-deep); }
+.dev-panel-status {
+  min-height: 14px;
+  margin-top: 8px;
+  font: 500 11px/1.2 Inter, sans-serif;
+  color: var(--teal-soft);
+  opacity: 0.9;
+}
+
+/* ================================================================
    HOW IT WORKS + WHAT THE MONEY BUYS (below the auction sections)
    ================================================================ */
 .how-section, .money-section {

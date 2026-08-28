@@ -38,6 +38,26 @@
     </nav>
   </header>
 
+  <!-- Dev scale panel — top-left floating overlay. Drag/spin/zoom the bottle
+       until it looks how you want, then click "Save as initial view". Refresh
+       and the bottle loads with those exact camera coords. Add ?dev=off (or
+       delete the saved view) to reset. Hide with ?dev=off — panel only renders
+       when localStorage/URL says dev is on. -->
+  <div id="dev-panel" class="dev-panel" hidden>
+    <div class="dev-panel-title">Scale · Orientation</div>
+    <div class="dev-panel-row"><span>distance</span><strong id="dev-dist">—</strong></div>
+    <div class="dev-panel-row"><span>azimuth (θ)</span><strong id="dev-az">—</strong></div>
+    <div class="dev-panel-row"><span>elevation (φ)</span><strong id="dev-el">—</strong></div>
+    <div class="dev-panel-row"><span>target Y</span><strong id="dev-ty">—</strong></div>
+    <div class="dev-panel-row"><span>viewport</span><strong id="dev-vp">—</strong></div>
+    <div class="dev-panel-btns">
+      <button id="dev-save" type="button" class="dev-btn dev-btn-primary">Save as initial view</button>
+      <button id="dev-reset" type="button" class="dev-btn">Reset to default</button>
+      <button id="dev-copy" type="button" class="dev-btn">Copy JSON</button>
+    </div>
+    <div class="dev-panel-status" id="dev-status"></div>
+  </div>
+
   <main>
     <!-- Money bar + live visitors — sits above the bottle without moving it -->
     <div class="topbar">
