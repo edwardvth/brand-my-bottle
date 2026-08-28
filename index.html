@@ -8,6 +8,9 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css" />
+  <!-- Kick off the 25MB bottle GLB download in parallel with JS so the model
+       is (hopefully) already in the browser cache by the time three.js runs. -->
+  <link rel="preload" href="stainless_steel_water_bottle.glb" as="fetch" crossorigin="anonymous" />
   <script type="importmap">
   {
     "imports": {

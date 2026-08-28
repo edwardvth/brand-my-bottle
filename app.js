@@ -154,9 +154,113 @@ window.addEventListener("resize", resize);
 let bottleMesh = null;
 let stickerMeshes = [];
 let bodyGeom = null; // { radius, height, centerY }
+let placeholderGroup = null;   // procedural cylinder shown until the GLB lands
+let bottomCap = null;          // recreated with placeholder AND with real bottle
+
+// Approximate dimensions the real bottle ends up at after scale/center. Chosen
+// so the placeholder + stickers land close to their final positions; the swap
+// when the GLB arrives is a small radius/taper adjustment, not a jarring jump.
+const PLACEHOLDER_RADIUS  = 0.145;
+const PLACEHOLDER_HEIGHT  = 0.62;
+const PLACEHOLDER_CENTERY = -0.03;
+
+// Instant-on placeholder: rough silver cylinder + a small "cap" on top so the
+// stickers have SOMETHING to sit on while the 25MB GLB downloads. The camera
+// is framed on this — when the GLB lands, the framing recomputes and adjusts.
+function mountPlaceholder() {
+  if (placeholderGroup) return;
+  const mat = new THREE.MeshStandardMaterial({
+    color: 0xdcdcdc,
+    metalness: 1.0,
+    roughness: 0.14,
+    envMapIntensity: 1.4,
+  });
+  placeholderGroup = new THREE.Group();
+  const body = new THREE.Mesh(
+    new THREE.CylinderGeometry(PLACEHOLDER_RADIUS, PLACEHOLDER_RADIUS, PLACEHOLDER_HEIGHT * 0.88, 64, 1, false),
+    mat
+  );
+  body.position.y = PLACEHOLDER_CENTERY;
+  placeholderGroup.add(body);
+  const shoulderH = PLACEHOLDER_HEIGHT * 0.08;
+  const shoulder = new THREE.Mesh(
+    new THREE.CylinderGeometry(PLACEHOLDER_RADIUS * 0.55, PLACEHOLDER_RADIUS, shoulderH, 48),
+    mat
+  );
+  shoulder.position.y = PLACEHOLDER_CENTERY + PLACEHOLDER_HEIGHT * 0.44 + shoulderH / 2;
+  placeholderGroup.add(shoulder);
+  const capH = PLACEHOLDER_HEIGHT * 0.08;
+  const cap = new THREE.Mesh(
+    new THREE.CylinderGeometry(PLACEHOLDER_RADIUS * 0.55, PLACEHOLDER_RADIUS * 0.55, capH, 48),
+    new THREE.MeshStandardMaterial({ color: 0x232323, metalness: 0.7, roughness: 0.35 })
+  );
+  cap.position.y = shoulder.position.y + shoulderH / 2 + capH / 2;
+  placeholderGroup.add(cap);
+  scene.add(placeholderGroup);
+
+  // Set bottleMesh so raycast + sticker taper-detection have a target.
+  bottleMesh = body;
+  bodyGeom = {
+    radius:  PLACEHOLDER_RADIUS,
+    height:  PLACEHOLDER_HEIGHT * 0.88,
+    centerY: PLACEHOLDER_CENTERY,
+  };
+
+  // Bottom disc so stickers on the back don't peek through the underside
+  bottomCap = new THREE.Mesh(
+    new THREE.CircleGeometry(bodyGeom.radius, 48),
+    mat
+  );
+  bottomCap.rotation.x = Math.PI / 2;
+  bottomCap.position.y = bodyGeom.centerY - bodyGeom.height / 2;
+  scene.add(bottomCap);
+
+  // Frame camera on placeholder (approximate)
+  const fovRad = camera.fov * Math.PI / 180;
+  const rect = canvasEl.getBoundingClientRect();
+  const aspect = Math.max(0.4, (rect.width || 1) / (rect.height || 1));
+  const totalH = PLACEHOLDER_HEIGHT + capH + shoulderH;
+  const dH = (totalH / 2) / Math.tan(fovRad / 2);
+  const dW = (PLACEHOLDER_RADIUS)     / Math.tan(fovRad / 2) / aspect;
+  const distance = Math.max(dH, dW) * 1.15;
+  const startTheta = SPOT_CONFIG[0].theta;
+  camera.position.set(
+    distance * Math.cos(startTheta),
+    PLACEHOLDER_CENTERY + totalH * 0.05,
+    distance * Math.sin(startTheta)
+  );
+  controls.target.set(0, PLACEHOLDER_CENTERY, 0);
+  controls.minDistance = distance * 0.45;
+  controls.maxDistance = distance * 1.9;
+  controls.update();
+
+  buildStickers();
+  resize();
+}
+
+function unmountPlaceholder() {
+  if (!placeholderGroup) return;
+  scene.remove(placeholderGroup);
+  placeholderGroup.traverse(o => {
+    if (o.geometry) o.geometry.dispose();
+    if (o.material) o.material.dispose();
+  });
+  placeholderGroup = null;
+  if (bottomCap) {
+    scene.remove(bottomCap);
+    bottomCap.geometry.dispose();
+    bottomCap.material.dispose();
+    bottomCap = null;
+  }
+}
+
+// Kick placeholder in immediately so the canvas is never blank.
+mountPlaceholder();
 
 const loader = new GLTFLoader();
 loader.load(MODEL_URL, (gltf) => {
+  // Real GLB just landed — swap out the placeholder.
+  unmountPlaceholder();
   const root = gltf.scene;
   scene.add(root);
 
@@ -276,7 +380,7 @@ loader.load(MODEL_URL, (gltf) => {
 
   // Add a bottom cap disc — this .glb's body mesh is open at the bottom, so
   // looking up from below revealed the sticker on the far side through the void.
-  const bottomCap = new THREE.Mesh(
+  bottomCap = new THREE.Mesh(
     new THREE.CircleGeometry(bodyGeom.radius, 48),
     silverMat
   );
