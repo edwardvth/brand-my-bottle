@@ -272,7 +272,7 @@
         <div class="bm-row">
           <div class="bm-field">
             <label class="lbl" for="brand-website">Website <span class="lbl-fine">(optional)</span></label>
-            <input type="url" name="website" id="brand-website" placeholder="https://microsoft.com" />
+            <input type="text" name="website" id="brand-website" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="mypassage.ai" />
           </div>
           <div class="bm-field">
             <label class="lbl" for="brand-x">X handle <span class="lbl-fine">(optional)</span></label>
@@ -312,52 +312,67 @@
   <!-- Post-purchase share modal — opens on ?bid=success return from Stripe.
        Logic lives inside the handleCheckoutReturn IIFE at the bottom of app.js. -->
   <div id="share-modal" class="modal share-modal" hidden>
-    <div class="modal-card share-card">
+    <div class="modal-card share-card" role="dialog" aria-labelledby="share-title" aria-modal="true">
       <button class="modal-close" id="share-close" aria-label="Close">×</button>
 
-      <div class="share-header">
-        <div class="share-eyebrow">Deposit captured</div>
-        <h3 id="share-title">You're in!</h3>
-        <p class="share-sub" id="share-sub">Spot — · —</p>
+      <!-- Poster: dark backdrop, CSS-drawn bottle, winner's logo composited on top -->
+      <div class="share-poster">
+        <div class="share-confetti" id="share-confetti" aria-hidden="true">
+          <span></span><span></span><span></span><span></span>
+          <span></span><span></span><span></span><span></span>
+        </div>
+        <div class="share-chip">Deposit captured</div>
+        <div class="share-bottle" aria-hidden="true">
+          <div class="share-bottle-cap"></div>
+          <div class="share-bottle-neck"></div>
+          <div class="share-bottle-body">
+            <div class="share-bottle-logo is-placeholder" id="share-bottle-logo">?</div>
+          </div>
+        </div>
       </div>
 
-      <p class="share-pitch">
-        Your logo rides on the bottle for a year. Tell people — every share drives more eyes on your spot.
-      </p>
+      <div class="share-body">
+        <h3 id="share-title">Welcome aboard, <em id="share-title-brand">friend</em>.</h3>
+        <p class="share-sub" id="share-sub">You just claimed a piece of a moving billboard.</p>
 
-      <div class="share-actions">
-        <a id="share-x" class="share-btn share-btn-x" href="#" target="_blank" rel="noopener noreferrer">
-          <span class="share-btn-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M18.244 2H21l-6.53 7.462L22.5 22h-6.902l-5.4-7.06L3.98 22H1.22l7.02-8.02L1.5 2h7.078l4.88 6.462L18.244 2Zm-2.42 18h1.9L7.29 4H5.253l10.57 16Z"/></svg>
-          </span>
-          <span class="share-btn-body">
-            <span class="share-btn-label">Post on X</span>
-            <span class="share-btn-sub">Opens the composer</span>
-          </span>
-        </a>
+        <div class="share-details" id="share-details">
+          <div class="share-detail">
+            <span class="share-detail-label">Spot</span>
+            <span class="share-detail-value" id="share-detail-spot">—</span>
+          </div>
+          <div class="share-detail">
+            <span class="share-detail-label">Size</span>
+            <span class="share-detail-value" id="share-detail-size">—</span>
+          </div>
+          <div class="share-detail">
+            <span class="share-detail-label">Bid</span>
+            <span class="share-detail-value mono" id="share-detail-bid">—</span>
+          </div>
+          <div class="share-detail">
+            <span class="share-detail-label" id="share-detail-link-label">Link</span>
+            <span class="share-detail-value mono" id="share-detail-link">—</span>
+          </div>
+        </div>
 
-        <button type="button" id="share-native" class="share-btn share-btn-native" hidden>
-          <span class="share-btn-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3"/><path d="M8 7l4-4 4 4"/><path d="M4 13v7h16v-7"/></svg>
-          </span>
-          <span class="share-btn-body">
-            <span class="share-btn-label">Share</span>
-            <span class="share-btn-sub">Your device share sheet</span>
-          </span>
-        </button>
+        <div class="share-actions" id="share-actions">
+          <a id="share-x" class="share-btn share-btn-x" href="#" target="_blank" rel="noopener noreferrer">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M18.244 2H21l-6.53 7.462L22.5 22h-6.902l-5.4-7.06L3.98 22H1.22l7.02-8.02L1.5 2h7.078l4.88 6.462L18.244 2Zm-2.42 18h1.9L7.29 4H5.253l10.57 16Z"/></svg>
+            <span>Post on X</span>
+          </a>
 
-        <button type="button" id="share-copy" class="share-btn share-btn-copy">
-          <span class="share-btn-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-          </span>
-          <span class="share-btn-body">
-            <span class="share-btn-label" id="share-copy-label">Copy link</span>
-            <span class="share-btn-sub">brand-my-bottle.pages.dev</span>
-          </span>
-        </button>
+          <button type="button" id="share-native" class="share-btn share-btn-native" hidden>
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V3"/><path d="M8 7l4-4 4 4"/><path d="M4 13v7h16v-7"/></svg>
+            <span>Share</span>
+          </button>
+
+          <button type="button" id="share-copy" class="share-btn share-btn-copy">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+            <span id="share-copy-label">Copy link</span>
+          </button>
+        </div>
+
+        <button type="button" class="share-later" id="share-later">Not now</button>
       </div>
-
-      <button type="button" class="share-later" id="share-later">Maybe later</button>
     </div>
   </div>
 

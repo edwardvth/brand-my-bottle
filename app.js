@@ -1285,7 +1285,10 @@ document.getElementById("bid-form").addEventListener("submit", async (e) => {
   const spotId = parseInt(form.dataset.spotId, 10);
   const brand   = brandNameEl.value.trim();
   const email   = brandEmailEl.value.trim();
-  const website = brandWebEl.value.trim();
+  // Website input is type=text so users can enter "mypassage.ai" without
+  // a scheme. Normalise here so the DB gets a real https:// URL.
+  let website = brandWebEl.value.trim();
+  if (website && !/^https?:\/\//i.test(website)) website = `https://${website}`;
   const xHandle = brandXEl.value.trim();
   const amount  = parseInt(bidInput.value, 10);
   const current = state.spots[spotId] ? state.spots[spotId].amount : 0;
@@ -1348,8 +1351,23 @@ document.getElementById("bid-form").addEventListener("submit", async (e) => {
       throw new Error(payload?.error || `checkout request failed (${res.status})`);
     }
 
-    // 3) Redirect. On return the URL will carry ?bid=success or ?bid=cancel —
-    //    see the boot-time toast handler at the very bottom of this file.
+    // 3) Stash the pending bid so the post-purchase share modal can render
+    //    the winner's details even before Supabase has caught up. Cleared by
+    //    the handler on ?bid=success or ?bid=cancel.
+    try {
+      sessionStorage.setItem("bmb_pending_bid", JSON.stringify({
+        spot_id: spotId,
+        amount,
+        brand,
+        website: website || null,
+        x_handle: xHandle || null,
+        logo_url: logoUrl,
+        at: Date.now(),
+      }));
+    } catch (_) { /* private mode etc — non-critical */ }
+
+    // 4) Redirect. On return the URL will carry ?bid=success or ?bid=cancel —
+    //    see the boot-time handler at the very bottom of this file.
     window.location.href = payload.url;
   } catch (err) {
     console.error("[bmb] checkout failed:", err);
@@ -1500,7 +1518,7 @@ setInterval(syncFromSupabase, 20 * 1000);
   setInterval(beat, 30_000);
 })();
 
-// ---------- Stripe return-from-Checkout toast ----------
+// ---------- Stripe return-from-Checkout: share modal (success) or toast (cancel) ----------
 // Kept at the very bottom of the file to minimise conflict area with the 3D
 // scene code above. When Stripe redirects the user back to the site the URL
 // carries ?bid=success or ?bid=cancel. On success we show a small toast and
@@ -1512,10 +1530,56 @@ setInterval(syncFromSupabase, 20 * 1000);
     const outcome = params.get("bid");
     if (outcome !== "success" && outcome !== "cancel") return;
 
-    // Strip the query param so a refresh doesn't re-toast.
+    // Strip the query param so a refresh doesn't re-open the modal.
     const cleanUrl = window.location.pathname + window.location.hash;
     window.history.replaceState({}, "", cleanUrl);
 
+    if (outcome === "cancel") {
+      // Payment cancelled — a plain toast is enough.
+      showToast("Payment cancelled — nothing was charged.");
+      // Also clear any stashed pending bid so a later success doesn't reuse it.
+      try { sessionStorage.removeItem("bmb_pending_bid"); } catch (_) {}
+      return;
+    }
+
+    // ---- SUCCESS: open the share modal ----
+    // 1) Read the bid the user just placed (stashed right before the Stripe
+    //    redirect). Fallback = anonymous placeholder for design-QA visits.
+    let pending = null;
+    try {
+      const raw = sessionStorage.getItem("bmb_pending_bid");
+      if (raw) pending = JSON.parse(raw);
+      sessionStorage.removeItem("bmb_pending_bid");
+    } catch (_) {}
+
+    // 2) Kick off Supabase polling — the webhook may still be in flight. As
+    //    rows arrive we refresh the modal fields with authoritative values.
+    let latestFromSupabase = null;
+    const poll = (tries = 0) => {
+      if (typeof syncFromSupabase === "function") {
+        // syncFromSupabase() updates state.spots in place. Re-populate the
+        // modal once state settles.
+        Promise.resolve(syncFromSupabase()).then(() => {
+          if (pending && state && state.spots && state.spots[pending.spot_id]) {
+            latestFromSupabase = state.spots[pending.spot_id];
+            populateShareModal(pending, latestFromSupabase);
+          }
+        }).catch(() => {});
+      }
+      if (tries < 5) setTimeout(() => poll(tries + 1), 1500);
+    };
+    poll();
+
+    // 3) Populate immediately from `pending` (or fallback), then open.
+    populateShareModal(pending, null);
+    openShareModal();
+  } catch (err) {
+    console.warn("[bmb] checkout-return handler failed:", err);
+  }
+
+  // ---------- helpers ----------
+
+  function showToast(msg) {
     const toast = document.createElement("div");
     toast.style.cssText =
       "position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:10000;" +
@@ -1523,30 +1587,192 @@ setInterval(syncFromSupabase, 20 * 1000);
       "font:500 14px/1.3 Inter,-apple-system,sans-serif;" +
       "box-shadow:0 12px 28px rgba(0,0,0,0.25);max-width:88vw;text-align:center;" +
       "transition:opacity .4s ease,transform .4s ease;opacity:0;";
-    toast.textContent = outcome === "success"
-      ? "Deposit captured. Refreshing the board…"
-      : "Payment cancelled — nothing was charged.";
+    toast.textContent = msg;
     document.body.appendChild(toast);
     requestAnimationFrame(() => { toast.style.opacity = "1"; });
-
-    if (outcome === "success") {
-      // Webhook usually lands within a second; give it a few tries before
-      // giving up. syncFromSupabase() rebuilds the stickers + grid + totals.
-      let tries = 0;
-      const poll = () => {
-        if (typeof syncFromSupabase === "function") syncFromSupabase();
-        tries += 1;
-        if (tries < 6) setTimeout(poll, 1500);
-      };
-      poll();
-    }
-
     setTimeout(() => {
       toast.style.opacity = "0";
       toast.style.transform = "translateX(-50%) translateY(8px)";
       setTimeout(() => toast.remove(), 500);
     }, 4500);
-  } catch (err) {
-    console.warn("[bmb] checkout-return toast failed:", err);
   }
+
+  function populateShareModal(pending, live) {
+    // Merge: prefer `live` (Supabase authoritative) when present, else use
+    // the pending stash we made pre-redirect. `state.spots[id]` shape uses
+    // { brand, amount, logo, website, x_handle }; pending uses `logo_url`.
+    const spotId  = (live && pending?.spot_id) || pending?.spot_id || null;
+    const brand   = (live?.brand)   || pending?.brand   || "Anonymous";
+    const amount  = (live?.amount)  ?? pending?.amount  ?? null;
+    const logo    = (live?.logo)    || pending?.logo_url || null;
+    const website = (live?.website) || pending?.website || null;
+    const xHandle = (live?.x_handle) || pending?.x_handle || null;
+    const meta    = (spotId && typeof SPOT_META !== "undefined" && SPOT_META[spotId]) || null;
+
+    const $ = (id) => document.getElementById(id);
+
+    // Headline
+    const brandEl = $("share-title-brand");
+    if (brandEl) brandEl.textContent = brand || "friend";
+    // Sub: rotate between two lines depending on whether we know the spot.
+    const subEl = $("share-sub");
+    if (subEl) {
+      subEl.textContent = spotId
+        ? "You just claimed a piece of a moving billboard."
+        : "Your spot is confirmed. Tell the world.";
+    }
+
+    // Details grid
+    const spotEl = $("share-detail-spot");
+    if (spotEl) spotEl.textContent = spotId ? `#${spotId}${meta ? " · " + meta.name : ""}` : "—";
+    const sizeEl = $("share-detail-size");
+    if (sizeEl) sizeEl.textContent = meta?.size || "—";
+    const bidEl  = $("share-detail-bid");
+    if (bidEl)  bidEl.textContent = (amount != null) ? `$${Number(amount).toLocaleString()}` : "—";
+
+    // Link cell: prefer x handle, else website, else the site URL.
+    const linkEl = $("share-detail-link");
+    const linkLabel = $("share-detail-link-label");
+    if (linkEl && linkLabel) {
+      if (xHandle) {
+        const handle = String(xHandle).replace(/^@/, "");
+        linkLabel.textContent = "On X";
+        linkEl.innerHTML = `<a href="https://x.com/${encodeURIComponent(handle)}" target="_blank" rel="noopener noreferrer">@${escapeHtmlSafe(handle)}</a>`;
+      } else if (website) {
+        const pretty = String(website).replace(/^https?:\/\//i, "").replace(/\/$/, "");
+        const href = /^https?:\/\//i.test(website) ? website : `https://${website}`;
+        linkLabel.textContent = "Website";
+        linkEl.innerHTML = `<a href="${escapeAttrSafe(href)}" target="_blank" rel="noopener noreferrer">${escapeHtmlSafe(pretty)}</a>`;
+      } else {
+        linkLabel.textContent = "Bottle";
+        linkEl.textContent = "brand-my-bottle.pages.dev";
+      }
+    }
+
+    // Bottle poster logo composite
+    const logoEl = $("share-bottle-logo");
+    if (logoEl) {
+      if (logo) {
+        logoEl.classList.remove("is-placeholder");
+        logoEl.style.backgroundImage = `url("${logo}")`;
+        logoEl.textContent = "";
+      } else {
+        logoEl.classList.add("is-placeholder");
+        logoEl.style.backgroundImage = "";
+        logoEl.textContent = (brand && brand !== "Anonymous")
+          ? brand.trim().charAt(0).toUpperCase()
+          : "?";
+      }
+    }
+
+    // X-intent URL
+    const xBtn = $("share-x");
+    if (xBtn) {
+      const tweet = buildTweet({ brand, spotId, amount });
+      xBtn.href = "https://x.com/intent/tweet?text=" + encodeURIComponent(tweet);
+    }
+  }
+
+  function buildTweet({ brand, spotId, amount }) {
+    const url = "https://brand-my-bottle.pages.dev";
+    if (spotId && amount != null) {
+      return `Just claimed sticker spot #${spotId} on the Brand My Bottle water bottle for $${amount}. My logo rides for a year. ${url}`;
+    }
+    if (spotId) {
+      return `Just claimed sticker spot #${spotId} on the Brand My Bottle water bottle. My logo rides for a year. ${url}`;
+    }
+    return `Just claimed a sticker spot on the Brand My Bottle water bottle. My logo rides for a year. ${url}`;
+  }
+
+  function openShareModal() {
+    const modal = document.getElementById("share-modal");
+    if (!modal) return;
+    modal.hidden = false;
+
+    // Restart confetti animation on every open (reflow trick)
+    const conf = document.getElementById("share-confetti");
+    if (conf) {
+      const clone = conf.cloneNode(true);
+      conf.parentNode.replaceChild(clone, conf);
+    }
+
+    // Wire up controls (idempotent — safe if called more than once)
+    const close = () => { modal.hidden = true; };
+    const closeBtn = document.getElementById("share-close");
+    const laterBtn = document.getElementById("share-later");
+    if (closeBtn && !closeBtn._bmbBound) { closeBtn.addEventListener("click", close); closeBtn._bmbBound = true; }
+    if (laterBtn && !laterBtn._bmbBound) { laterBtn.addEventListener("click", close); laterBtn._bmbBound = true; }
+    if (!modal._bmbBackdropBound) {
+      modal.addEventListener("click", (e) => { if (e.target === modal) close(); });
+      modal._bmbBackdropBound = true;
+    }
+    if (!modal._bmbEscBound) {
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape" && !modal.hidden) close();
+      });
+      modal._bmbEscBound = true;
+    }
+
+    // Native share (mobile) — hide if unsupported
+    const nativeBtn = document.getElementById("share-native");
+    const actionsRow = document.getElementById("share-actions");
+    if (nativeBtn) {
+      if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
+        nativeBtn.hidden = false;
+        if (actionsRow) actionsRow.setAttribute("data-has-native", "1");
+        if (!nativeBtn._bmbBound) {
+          nativeBtn.addEventListener("click", async () => {
+            const xBtn = document.getElementById("share-x");
+            const text = xBtn ? decodeURIComponent(xBtn.href.split("text=")[1] || "") : "";
+            try {
+              await navigator.share({
+                title: "Brand My Bottle",
+                text: text || "I just claimed a sticker spot on the Brand My Bottle water bottle.",
+                url: "https://brand-my-bottle.pages.dev",
+              });
+            } catch (_) { /* user cancelled */ }
+          });
+          nativeBtn._bmbBound = true;
+        }
+      } else {
+        nativeBtn.hidden = true;
+        if (actionsRow) actionsRow.removeAttribute("data-has-native");
+      }
+    }
+
+    // Copy link
+    const copyBtn = document.getElementById("share-copy");
+    const copyLabel = document.getElementById("share-copy-label");
+    if (copyBtn && !copyBtn._bmbBound) {
+      copyBtn.addEventListener("click", async () => {
+        const url = "https://brand-my-bottle.pages.dev";
+        try {
+          await navigator.clipboard.writeText(url);
+        } catch (_) {
+          // Fallback: open a hidden textarea + execCommand
+          const t = document.createElement("textarea");
+          t.value = url; document.body.appendChild(t); t.select();
+          try { document.execCommand("copy"); } catch (_) {}
+          t.remove();
+        }
+        copyBtn.classList.add("share-btn-copied");
+        if (copyLabel) {
+          const orig = copyLabel.textContent;
+          copyLabel.textContent = "Copied";
+          setTimeout(() => {
+            copyBtn.classList.remove("share-btn-copied");
+            copyLabel.textContent = orig || "Copy link";
+          }, 1800);
+        }
+      });
+      copyBtn._bmbBound = true;
+    }
+  }
+
+  function escapeHtmlSafe(s) {
+    return String(s).replace(/[&<>"']/g, (c) => (
+      { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]
+    ));
+  }
+  function escapeAttrSafe(s) { return escapeHtmlSafe(s); }
 })();
