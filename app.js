@@ -4,6 +4,7 @@
 
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { createClient } from "@supabase/supabase-js";
@@ -18,12 +19,25 @@ const dollarsToCents = (d) => Math.round(Number(d) * 100);
 const centsToDollars = (c) => Math.round(Number(c) / 100);
 
 // ---------- Config ----------
-const MODEL_URL = "stainless_steel_water_bottle.glb";
+const MODEL_URL = "bottle-slim.glb";
 const BODY_NODE_NAME = "Water Bottle_5";
 const STORAGE_KEY = "bmb.state.v7";
 const AUCTION_END = Date.now() + 12 * 86400 * 1000 + 14 * 3600 * 1000;
 const MIN_INCREMENT = 1;
 const STARTING_BID = 1;
+
+// ---------- Bottle geometry constants (SHARED between placeholder + real GLB) ----------
+// These are the target dimensions the FINAL bottle renders at. Both the
+// placeholder and the real GLB normalize to them, so:
+//   - the camera is framed ONCE at boot and never jumps when the GLB lands
+//   - the stickers sit at the same world Y / radius before and after the swap
+//   - the placeholder has the same silhouette as the real bottle
+// Height ~ Hydro-Flask 21oz (2.5 : 1 h:d ratio).
+const TARGET_TOTAL_HEIGHT = 0.62;                 // union bbox (body + cap) height
+const TARGET_BODY_HEIGHT  = TARGET_TOTAL_HEIGHT * 0.86;  // body ≈ 86% of total (cap = 14%)
+const TARGET_BODY_RADIUS  = TARGET_TOTAL_HEIGHT / 5.0;   // 2.5:1 h:d → radius = h/5
+const TARGET_BODY_CENTERY = -TARGET_TOTAL_HEIGHT * 0.07; // body center sits slightly below origin
+const TARGET_CAP_HEIGHT   = TARGET_TOTAL_HEIGHT - TARGET_BODY_HEIGHT; // whatever's left
 
 // 11 stickers (user OK'd going past 10 to restore the below-spot-4 tile).
 //  - Spot 1:  LONG horizontal top banner (front, taller)
@@ -170,16 +184,33 @@ let bodyGeom = null; // { radius, height, centerY }
 let placeholderGroup = null;   // procedural cylinder shown until the GLB lands
 let bottomCap = null;          // recreated with placeholder AND with real bottle
 
-// Approximate dimensions the real bottle ends up at after scale/center. Chosen
-// so the placeholder + stickers land close to their final positions; the swap
-// when the GLB arrives is a small radius/taper adjustment, not a jarring jump.
-const PLACEHOLDER_RADIUS  = 0.145;
-const PLACEHOLDER_HEIGHT  = 0.62;
-const PLACEHOLDER_CENTERY = -0.03;
+// Frame the camera ONCE from the shared target constants. Both the placeholder
+// and the real bottle render at these dimensions, so the camera never needs to
+// re-frame when the GLB lands (no jump, no jitter).
+function frameCameraOnce() {
+  const fovRad = camera.fov * Math.PI / 180;
+  const rect = canvasEl.getBoundingClientRect();
+  const aspect = Math.max(0.4, (rect.width || 1) / (rect.height || 1));
+  const distForHeight = (TARGET_TOTAL_HEIGHT / 2) / Math.tan(fovRad / 2);
+  const distForWidth  = TARGET_BODY_RADIUS / Math.tan(fovRad / 2) / aspect;
+  let distance = Math.max(distForHeight, distForWidth) * 1.15;
+  if (!Number.isFinite(distance) || distance <= 0) distance = 1.5;
+  const startTheta = SPOT_CONFIG[0].theta;
+  camera.position.set(
+    distance * Math.cos(startTheta),
+    TARGET_BODY_CENTERY + TARGET_TOTAL_HEIGHT * 0.05,
+    distance * Math.sin(startTheta)
+  );
+  controls.target.set(0, TARGET_BODY_CENTERY, 0);
+  controls.minDistance = distance * 0.45;
+  controls.maxDistance = distance * 1.9;
+  controls.update();
+}
 
-// Instant-on placeholder: rough silver cylinder + a small "cap" on top so the
-// stickers have SOMETHING to sit on while the 25MB GLB downloads. The camera
-// is framed on this — when the GLB lands, the framing recomputes and adjusts.
+// Instant-on placeholder: proportioned to match the real bottle's final scale
+// EXACTLY (same body height, radius, centerY, cap height). The user sees a
+// simple silver cylinder-bottle with the correct silhouette; when the GLB
+// lands the swap is atomic (same frame) and the stickers do not move.
 function mountPlaceholder() {
   if (placeholderGroup) return;
   const mat = new THREE.MeshStandardMaterial({
@@ -189,73 +220,62 @@ function mountPlaceholder() {
     envMapIntensity: 1.4,
   });
   placeholderGroup = new THREE.Group();
-  const body = new THREE.Mesh(
-    new THREE.CylinderGeometry(PLACEHOLDER_RADIUS, PLACEHOLDER_RADIUS, PLACEHOLDER_HEIGHT * 0.88, 64, 1, false),
+
+  // Body cylinder — sized to EXACT target dimensions
+  const bodyCyl = new THREE.Mesh(
+    new THREE.CylinderGeometry(
+      TARGET_BODY_RADIUS,
+      TARGET_BODY_RADIUS,
+      TARGET_BODY_HEIGHT,
+      64, 1, false
+    ),
     mat
   );
-  body.position.y = PLACEHOLDER_CENTERY;
-  placeholderGroup.add(body);
-  const shoulderH = PLACEHOLDER_HEIGHT * 0.08;
+  bodyCyl.position.y = TARGET_BODY_CENTERY;
+  placeholderGroup.add(bodyCyl);
+
+  // Rounded shoulder tapering to the cap
+  const shoulderH = TARGET_CAP_HEIGHT * 0.55;
   const shoulder = new THREE.Mesh(
-    new THREE.CylinderGeometry(PLACEHOLDER_RADIUS * 0.55, PLACEHOLDER_RADIUS, shoulderH, 48),
+    new THREE.CylinderGeometry(TARGET_BODY_RADIUS * 0.55, TARGET_BODY_RADIUS, shoulderH, 48),
     mat
   );
-  shoulder.position.y = PLACEHOLDER_CENTERY + PLACEHOLDER_HEIGHT * 0.44 + shoulderH / 2;
+  shoulder.position.y = TARGET_BODY_CENTERY + TARGET_BODY_HEIGHT / 2 + shoulderH / 2;
   placeholderGroup.add(shoulder);
-  const capH = PLACEHOLDER_HEIGHT * 0.08;
+
+  // Dark screw-cap on top
+  const capH = TARGET_CAP_HEIGHT * 0.45;
   const cap = new THREE.Mesh(
-    new THREE.CylinderGeometry(PLACEHOLDER_RADIUS * 0.55, PLACEHOLDER_RADIUS * 0.55, capH, 48),
+    new THREE.CylinderGeometry(TARGET_BODY_RADIUS * 0.55, TARGET_BODY_RADIUS * 0.55, capH, 48),
     new THREE.MeshStandardMaterial({ color: 0x232323, metalness: 0.7, roughness: 0.35 })
   );
   cap.position.y = shoulder.position.y + shoulderH / 2 + capH / 2;
   placeholderGroup.add(cap);
+
   scene.add(placeholderGroup);
 
-  // Set bottleMesh so raycast + sticker taper-detection have a target.
-  bottleMesh = body;
+  // Give raycasts + sticker taper-detection a target that MATCHES the real
+  // bottle's final radius / height / centerY exactly.
+  bottleMesh = bodyCyl;
   bodyGeom = {
-    radius:  PLACEHOLDER_RADIUS,
-    height:  PLACEHOLDER_HEIGHT * 0.88,
-    centerY: PLACEHOLDER_CENTERY,
+    radius:  TARGET_BODY_RADIUS,
+    height:  TARGET_BODY_HEIGHT,
+    centerY: TARGET_BODY_CENTERY,
   };
 
   // Bottom disc so stickers on the back don't peek through the underside
   bottomCap = new THREE.Mesh(
-    new THREE.CircleGeometry(bodyGeom.radius, 48),
+    new THREE.CircleGeometry(TARGET_BODY_RADIUS, 48),
     mat
   );
   bottomCap.rotation.x = Math.PI / 2;
-  bottomCap.position.y = bodyGeom.centerY - bodyGeom.height / 2;
+  bottomCap.position.y = TARGET_BODY_CENTERY - TARGET_BODY_HEIGHT / 2;
   scene.add(bottomCap);
 
-  // Frame camera on placeholder (approximate)
-  const fovRad = camera.fov * Math.PI / 180;
-  const rect = canvasEl.getBoundingClientRect();
-  const aspect = Math.max(0.4, (rect.width || 1) / (rect.height || 1));
-  const totalH = PLACEHOLDER_HEIGHT + capH + shoulderH;
-  const dH = (totalH / 2) / Math.tan(fovRad / 2);
-  const dW = (PLACEHOLDER_RADIUS)     / Math.tan(fovRad / 2) / aspect;
-  let distance = Math.max(dH, dW) * 1.15;
-  // NaN guard — if aspect / tan produced anything degenerate we still want a
-  // usable camera. 1.5 is a sane default at the placeholder's scale.
-  if (!Number.isFinite(distance) || distance <= 0) distance = 1.5;
-  const startTheta = SPOT_CONFIG[0].theta;
-  camera.position.set(
-    distance * Math.cos(startTheta),
-    PLACEHOLDER_CENTERY + totalH * 0.05,
-    distance * Math.sin(startTheta)
-  );
-  controls.target.set(0, PLACEHOLDER_CENTERY, 0);
-  controls.minDistance = distance * 0.45;
-  controls.maxDistance = distance * 1.9;
-  controls.update();
-
-  // Make sure world matrices are up-to-date BEFORE buildStickers runs its
-  // raycasts against bottleMesh — otherwise localRadiusAt hits the mesh at
-  // its identity transform (or misses entirely) and stickers can be built
-  // with a wrong radius on the first frame.
   placeholderGroup.updateMatrixWorld(true);
 
+  // Camera framing + stickers use the SAME target constants — no drift.
+  frameCameraOnce();
   buildStickers();
   resize();
 }
@@ -268,12 +288,9 @@ function unmountPlaceholder() {
     if (o.material) o.material.dispose();
   });
   placeholderGroup = null;
-  if (bottomCap) {
-    scene.remove(bottomCap);
-    bottomCap.geometry.dispose();
-    bottomCap.material.dispose();
-    bottomCap = null;
-  }
+  // NOTE: caller owns the bottomCap swap. Do NOT touch bottomCap or
+  // stickerMeshes here — the atomic swap in the GLB callback replaces them
+  // in one operation so the render loop never sees an intermediate state.
 }
 
 // Kick placeholder in on the next frame — deferring by one rAF guarantees the
@@ -284,15 +301,25 @@ function unmountPlaceholder() {
 requestAnimationFrame(() => mountPlaceholder());
 
 const loader = new GLTFLoader();
+// bottle-slim.glb is meshopt-compressed — MeshoptDecoder must be wired in.
+loader.setMeshoptDecoder(MeshoptDecoder);
 loader.load(MODEL_URL, (gltf) => {
-  // Real GLB just landed — swap out the placeholder.
-  unmountPlaceholder();
+  // Real GLB just landed. Build the real bottle root INVISIBLE first, wire up
+  // stickers + bottom cap against its final dimensions, THEN do a single atomic
+  // swap: remove placeholder, reveal real root, replace stickers + bottomCap.
+  // The render loop between here and the swap only ever sees a fully-built
+  // scene — no giant floating stickers.
   const root = gltf.scene;
+  root.visible = false;
   scene.add(root);
 
   // Find the "Water Bottle_5" node — it contains BOTH the body mesh (Object_13, tall)
   // and its cap top (Object_14). Keep everything under this node visible; hide the
   // stand / duplicate bottles that live elsewhere in the scene.
+  // Reset bottleMesh — it's still pointing at the placeholder cylinder until we
+  // assign the real GLB body mesh below, and the traverse loop's "tallest mesh"
+  // comparison would otherwise measure against the placeholder.
+  bottleMesh = null;
   const bodyRoot = findNodeByName(root, BODY_NODE_NAME);
   const keepMeshes = new Set();
   if (bodyRoot) {
@@ -343,84 +370,93 @@ loader.load(MODEL_URL, (gltf) => {
     }
   });
 
-  // Union bbox of ALL kept meshes (body + cap) for correct total-height framing
+  // Normalize the GLB to the SHARED target dimensions so it lands at exactly
+  // the same size/position as the placeholder. Steps:
+  //   1) union bbox on original scale
+  //   2) scale so BODY mesh height == TARGET_BODY_HEIGHT
+  //      (not the union — the placeholder's body cylinder is TARGET_BODY_HEIGHT,
+  //      so matching body-to-body keeps stickers glued to the same world Y range)
+  //   3) widen X/Z so body radius == TARGET_BODY_RADIUS
+  //   4) recenter so body center sits at TARGET_BODY_CENTERY
   bottleMesh.updateMatrixWorld(true);
-  const unionPre = new THREE.Box3();
-  keepMeshes.forEach(m => unionPre.expandByObject(m));
-  const preSize = unionPre.getSize(new THREE.Vector3());
-
-  // Normalize total height, THEN widen X/Z so the bottle isn't twiggy.
-  // The .glb bottle has ratio 3.4:1 (very tall/thin). A real Hydro Flask-style
-  // bottle is more like 2.6:1, so we squash by widening horizontally.
-  const targetTotalHeight = 0.62;
-  const heightScale = targetTotalHeight / preSize.y;
-  const widthScale  = heightScale * 1.60;  // 60% chunkier on X/Z (thicker barrel)
+  const bodyPre = new THREE.Box3().setFromObject(bottleMesh);
+  const bodyPreSize = bodyPre.getSize(new THREE.Vector3());
+  const heightScale = TARGET_BODY_HEIGHT / bodyPreSize.y;
+  const preBodyRadius = Math.max(bodyPreSize.x, bodyPreSize.z) / 2;
+  const widthScale  = TARGET_BODY_RADIUS / preBodyRadius;
   root.scale.set(widthScale, heightScale, widthScale);
   root.updateMatrixWorld(true);
 
-  // Recompute union bbox after non-uniform scaling
-  const union = new THREE.Box3();
-  keepMeshes.forEach(m => union.expandByObject(m));
-  const uSize = union.getSize(new THREE.Vector3());
-  const uCenter = union.getCenter(new THREE.Vector3());
-
-  // Recenter whole model so its union-bbox center is at origin
-  root.position.sub(uCenter);
+  // Recenter so BODY center → (0, TARGET_BODY_CENTERY, 0)
+  const bodyPost = new THREE.Box3().setFromObject(bottleMesh);
+  const bCenter = bodyPost.getCenter(new THREE.Vector3());
+  root.position.x -= bCenter.x;
+  root.position.z -= bCenter.z;
+  root.position.y += (TARGET_BODY_CENTERY - bCenter.y);
   root.updateMatrixWorld(true);
 
-  // Now measure the BODY mesh (for sticker placement) in the recentered world
-  const bodyBox = new THREE.Box3().setFromObject(bottleMesh);
-  const bSize = bodyBox.getSize(new THREE.Vector3());
-  const bCenter = bodyBox.getCenter(new THREE.Vector3());
-  bodyGeom = {
-    radius: Math.max(bSize.x, bSize.z) / 2,
-    height: bSize.y,
-    centerY: bCenter.y,
+  // Final measured bodyGeom (should match TARGET_* within float error).
+  const bodyFinal = new THREE.Box3().setFromObject(bottleMesh);
+  const bfSize = bodyFinal.getSize(new THREE.Vector3());
+  const bfCenter = bodyFinal.getCenter(new THREE.Vector3());
+  const nextBodyGeom = {
+    radius: Math.max(bfSize.x, bfSize.z) / 2,
+    height: bfSize.y,
+    centerY: bfCenter.y,
   };
 
-  // Build 12 curved sticker overlays on the body
-  buildStickers();
-
-  // Frame from UNION bbox (body + cap) so the cap fits in view too
-  const framingBox = new THREE.Box3();
-  keepMeshes.forEach(m => framingBox.expandByObject(m));
-  const fSize = framingBox.getSize(new THREE.Vector3());
-  const fCenter = framingBox.getCenter(new THREE.Vector3());
-  const fovRad = camera.fov * Math.PI / 180;
-  const rect = canvasEl.getBoundingClientRect();
-  const aspect = Math.max(0.4, (rect.width || 1) / (rect.height || 1));
-  const distForHeight = (fSize.y / 2) / Math.tan(fovRad / 2);
-  const distForWidth  = (Math.max(fSize.x, fSize.z) / 2) / Math.tan(fovRad / 2) / aspect;
-  const distance = Math.max(distForHeight, distForWidth) * 1.15;
-  // Start camera on spot #1's axis so the spin naturally reveals #1 first.
-  const startTheta = SPOT_CONFIG[0].theta;
-  camera.position.set(
-    distance * Math.cos(startTheta),
-    fCenter.y + fSize.y * 0.05,
-    distance * Math.sin(startTheta)
-  );
-  controls.target.set(0, fCenter.y, 0);
-  controls.minDistance = distance * 0.45;
-  controls.maxDistance = distance * 1.9;
-  controls.update();
-
-  // Add a bottom cap disc — this .glb's body mesh is open at the bottom, so
-  // looking up from below revealed the sticker on the far side through the void.
-  bottomCap = new THREE.Mesh(
-    new THREE.CircleGeometry(bodyGeom.radius, 48),
+  // Build the new bottom cap disc AND the new stickers OFF-SCENE. We swap
+  // them in atomically below so the render loop never sees the placeholder
+  // gone with old stickers still visible.
+  const nextBottomCap = new THREE.Mesh(
+    new THREE.CircleGeometry(nextBodyGeom.radius, 48),
     silverMat
   );
-  bottomCap.rotation.x = Math.PI / 2;                 // face downward
-  bottomCap.position.y = bodyGeom.centerY - bodyGeom.height / 2;
-  scene.add(bottomCap);
+  nextBottomCap.rotation.x = Math.PI / 2;
+  nextBottomCap.position.y = nextBodyGeom.centerY - nextBodyGeom.height / 2;
 
+  // Point sticker-builder helpers at the new bodyGeom BEFORE calling
+  // buildStickers(). buildStickers() reads module-level bodyGeom + bottleMesh,
+  // and raycasts against bottleMesh — but bottleMesh at this point is still
+  // the placeholder cylinder. We swap those first, then build.
+  bodyGeom = nextBodyGeom;
+  // bottleMesh already points at the GLB body mesh (assigned in the traverse
+  // above). Raycasts against it will now hit the real geometry.
+
+  // === ATOMIC SWAP (one JS turn, no render frame in between) ===
+  // 1. Tear down old sticker meshes
+  stickerMeshes.forEach(m => {
+    scene.remove(m);
+    m.geometry.dispose();
+    m.material.map?.dispose();
+    m.material.dispose();
+  });
+  stickerMeshes = [];
+  // 2. Tear down placeholder + old bottom cap
+  const oldBottomCap = bottomCap;
+  bottomCap = null;
+  unmountPlaceholder();
+  if (oldBottomCap) {
+    scene.remove(oldBottomCap);
+    oldBottomCap.geometry.dispose();
+    oldBottomCap.material.dispose();
+  }
+  // 3. Reveal the real bottle + attach the new bottom cap
+  root.visible = true;
+  bottomCap = nextBottomCap;
+  scene.add(bottomCap);
+  // 4. Build fresh stickers against the real body geometry
+  buildStickers();
+  // 5. Ensure framebuffer is sized to current canvas (in case it changed)
   resize();
+  // Camera framing is NOT touched here — frameCameraOnce() at boot already
+  // set it based on the same target constants the real bottle now matches.
 
   setDebug(
     `body mesh: ${bottleMesh?.name}\n` +
     `hidden meshes: ${hiddenCount}\n` +
     `radius: ${bodyGeom.radius.toFixed(3)}  height: ${bodyGeom.height.toFixed(3)}\n` +
-    `centerY: ${bodyGeom.centerY.toFixed(3)}  camera dist: ${distance.toFixed(3)}\n` +
+    `centerY: ${bodyGeom.centerY.toFixed(3)}\n` +
     `stickers: ${stickerMeshes.length}/${TOTAL}`
   );
 }, undefined, (err) => {
