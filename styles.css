@@ -555,6 +555,63 @@ footer a:hover { color: var(--teal); }
 }
 
 /* ================================================================
+   HOW IT WORKS + WHAT THE MONEY BUYS (below the auction sections)
+   ================================================================ */
+.how-section, .money-section {
+  padding-top: 40px;
+  padding-bottom: 40px;
+}
+.how-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 auto;
+  max-width: 720px;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+.how-step {
+  display: grid;
+  grid-template-columns: 44px 1fr;
+  gap: 18px;
+  align-items: flex-start;
+}
+.how-num {
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  background: var(--ink);
+  color: var(--paper);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font: 700 15px/1 Inter, sans-serif;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.how-body h3 {
+  margin: 0 0 6px;
+  font: 700 18px/1.25 Inter, -apple-system, sans-serif;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+}
+.how-body p {
+  margin: 0;
+  font: 400 15px/1.55 Inter, sans-serif;
+  color: var(--ink-2);
+}
+
+.money-section { padding-top: 16px; }
+.money-answer {
+  max-width: 720px;
+  margin: 0 auto;
+  font-family: var(--serif);
+  font-size: clamp(28px, 4vw, 42px);
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+
+/* ================================================================
    TOPBAR: live visitors pill + money bar (above the hero)
    ================================================================ */
 .topbar {
