@@ -6,6 +6,16 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
+import { createClient } from "@supabase/supabase-js";
+
+// ---------- Supabase (reuses commit.cash's project; scoped to bmb_* tables) ----------
+const SUPABASE_URL = "https://kmzjbyndzgaxkrdbrdof.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImttempieW5kemdheGtyZGJyZG9mIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcyNzc2NDEsImV4cCI6MjEwMjg1MzY0MX0.m5Ve5B2zbwxgSTQRceYurJT6jAZkjQYKDo5npvgvxx4";
+const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// Amounts stored as INTEGER CENTS in Supabase; UI works in whole dollars.
+const dollarsToCents = (d) => Math.round(Number(d) * 100);
+const centsToDollars = (c) => Math.round(Number(c) / 100);
 
 // ---------- Config ----------
 const MODEL_URL = "stainless_steel_water_bottle.glb";
@@ -15,27 +25,29 @@ const AUCTION_END = Date.now() + 12 * 86400 * 1000 + 14 * 3600 * 1000;
 const MIN_INCREMENT = 1;
 const STARTING_BID = 1;
 
-// 10 stickers, 3-2-3-2 checkerboard on the LOWER barrel — proper alternation,
-// no vertical overlap, completed bottom row. All rows sit under the taper.
+// 10 stickers.
+//  - Spot 1: LONG horizontal top banner (front)
+//  - Spot 2: medium on the back-right (moved right from centered-back)
+//  - Spots 3/6/7/8/9: front die-5 quincunx (TL, TR, center, BL, BR)
+//  - Spot 4: XL quad on right side
+//  - Spots 5, 10: extra-wide tall verticals on left side
 const _TAU3 = (Math.PI * 2) / 3;   // 120°
-const _TAU6 = Math.PI / 3;         // 60° stagger for odd rows
+const _DIE  = 0.42;                // ± arc for front die corners
 const SPOT_CONFIG = [
-  // Row 0 (upper barrel): y = +0.75  — 3 spots at 0°, ±120°
-  { id: 1,  y:  0.75, theta:  0,           sizeMul: 1.15 },
-  { id: 2,  y:  0.75, theta:  _TAU3,       sizeMul: 1.10 },
-  { id: 3,  y:  0.75, theta: -_TAU3,       sizeMul: 1.10 },
-  // Row 1 (staggered):    y = +0.25  — 2 spots at ±60° (skip the back so it
-  //                                     doesn't line up with row 3's back spot)
-  { id: 4,  y:  0.25, theta:  _TAU6,       sizeMul: 1.20 },
-  { id: 5,  y:  0.25, theta: -_TAU6,       sizeMul: 1.20 },
-  // Row 2: y = -0.25 — 3 spots at 0°, ±120°
-  { id: 6,  y: -0.25, theta:  0,           sizeMul: 1.15 },
-  { id: 7,  y: -0.25, theta:  _TAU3,       sizeMul: 1.10 },
-  { id: 8,  y: -0.25, theta: -_TAU3,       sizeMul: 1.10 },
-  // Row 3 (staggered):    y = -0.75  — 2 spots at ±60°  (fills the bottom band
-  //                                     that used to only have a single sticker)
-  { id: 9,  y: -0.75, theta:  _TAU6,       sizeMul: 1.20 },
-  { id: 10, y: -0.75, theta: -_TAU6,       sizeMul: 1.20 },
+  // Row 1 (top): banner on front + medium on back
+  { id: 1,  y:  0.35, theta:  0,               wMul: 2.60, hMul: 1.00 }, // taller banner
+  { id: 2,  y:  0.35, theta:  Math.PI - 0.55,  wMul: 1.15, hMul: 1.15 }, // moved right from back-center
+  // Front die-5 top row + right-side quad + left tall
+  { id: 3,  y: -0.05, theta: -_DIE,            wMul: 1.10, hMul: 1.20 }, // die TL
+  { id: 4,  y: -0.05, theta:  _TAU3,           wMul: 2.00, hMul: 2.00 }, // QUAD right side
+  { id: 5,  y: -0.05, theta: -_TAU3,           wMul: 1.60, hMul: 2.80 }, // TALL vertical (wider)
+  { id: 6,  y: -0.05, theta:  _DIE,            wMul: 1.10, hMul: 1.20 }, // die TR
+  // Front die-5 CENTER
+  { id: 7,  y: -0.45, theta:  0,               wMul: 1.30, hMul: 1.30 }, // die CENTER
+  // Front die-5 bottom row + left tall
+  { id: 8,  y: -0.85, theta: -_DIE,            wMul: 1.10, hMul: 1.20 }, // die BL
+  { id: 9,  y: -0.85, theta:  _DIE,            wMul: 1.10, hMul: 1.20 }, // die BR
+  { id: 10, y: -0.85, theta: -_TAU3,           wMul: 1.60, hMul: 2.80 }, // TALL vertical (wider)
 ];
 const TOTAL = SPOT_CONFIG.length;
 
@@ -400,14 +412,13 @@ function buildStickers() {
 
   if (!bodyGeom) return;
 
-  // y in SPOT_CONFIG is normalized [-1, +1]. Band tightened + baseHeight reduced
-  // so 4 rows of MEDIUM+LARGE stickers (max 1.20x) don't overlap vertically.
-  // Verification: rows are 0.50 units apart → world Δy = 0.50 * bandHalfHeight
-  // = 0.50 * 0.30 * body_height = 0.15 * body_height. Max sticker height =
-  // 1.20 * 0.09 * body_height = 0.108 * body_height. Gap ≈ 0.04 * body_height.
-  const bandHalfHeight = bodyGeom.height * 0.30;
+  // y in SPOT_CONFIG is normalized [-1, +1]. Band widened + baseHeight bumped
+  // (user wanted taller stickers) — still no overlap.
+  // Verification: rows 0.40 apart → world Δy = 0.40 * 0.42 * body_h = 0.168 * body_h.
+  // Max sticker height = 1.15 * 0.11 * body_h = 0.126 * body_h. Gap ≈ 0.04 body_h.
+  const bandHalfHeight = bodyGeom.height * 0.42;
   const baseArc    = (Math.PI * 2) / 3 * 0.50;  // baseline sticker arc
-  const baseHeight = bodyGeom.height * 0.09;    // reduced from 0.12 → no vertical overlap
+  const baseHeight = bodyGeom.height * 0.11;    // ~22% taller than v6
 
   // Taper-aware local radius: cast a ray from the cylinder axis outward at the
   // sticker's Y and theta; hit the bottle surface; use that distance as the
@@ -431,8 +442,11 @@ function buildStickers() {
     const price = spot ? spot.amount : STARTING_BID;
     const taken = !!spot;
 
-    const arcAngle = baseArc * cfg.sizeMul;
-    const stickerH = baseHeight * cfg.sizeMul;
+    // Per-axis size multipliers (backwards-compatible with sizeMul)
+    const wMul = cfg.wMul ?? cfg.sizeMul ?? 1.0;
+    const hMul = cfg.hMul ?? cfg.sizeMul ?? 1.0;
+    const arcAngle = baseArc * wMul;
+    const stickerH = baseHeight * hMul;
     const yWorld   = bodyGeom.centerY + cfg.y * bandHalfHeight;
 
     // Local radius at this sticker's exact position (handles taper)
@@ -509,12 +523,27 @@ canvasEl.addEventListener("pointermove", (e) => {
   pillEl.hidden = false;
   canvasEl.style.cursor = "pointer";
 });
-canvasEl.addEventListener("pointerleave", () => {
+canvasEl.addEventListener("pointerleave", (e) => {
+  // If the mouse is moving ONTO the pill (which now has pointer-events:auto so
+  // it's actually clickable), don't hide it — otherwise we get an infinite
+  // hide→show flicker.
+  if (e.relatedTarget === pillEl || (pillEl && pillEl.contains && pillEl.contains(e.relatedTarget))) return;
   hoveredSpotId = null;
   pillEl.hidden = true;
 });
-// Pill is pointer-events:none. Clicks pass through to the canvas which already
-// raycasts + opens the modal. No pill click handler needed.
+// Direct pill click — opens the modal for the currently-hovered sticker.
+pillEl.addEventListener("click", (e) => {
+  e.stopPropagation();
+  if (hoveredSpotId != null) openBidModal(hoveredSpotId);
+});
+// Keep pill visible while mouse hovers it
+pillEl.addEventListener("pointerleave", (e) => {
+  // If leaving pill but not going back onto the canvas, hide
+  if (e.relatedTarget !== canvasEl) {
+    hoveredSpotId = null;
+    pillEl.hidden = true;
+  }
+});
 
 // Project a sticker's 3D center to screen coords and place the pill there
 function positionPillAt(mesh) {
@@ -599,74 +628,185 @@ function refreshTotals() {
 }
 
 // ---------- Bid modal ----------
-const bidInput   = document.getElementById("bid-input");
-const bidCurrent = document.getElementById("bid-current");
-const bidMinEl   = document.getElementById("bid-min");
-const bidQuickEl = document.getElementById("bid-quick");
-const bidSubmit  = document.getElementById("bid-submit");
-const bidSubmitAmt = document.getElementById("bid-submit-amt");
-const bidTitleEl = document.getElementById("bid-modal-title");
+// Descriptive labels + rough physical sticker size (from SPOT_CONFIG sizeMul)
+const SPOT_META = {
+  1:  { name: "Front — top banner",  size: "Long banner"  },
+  2:  { name: "Back-right — upper",  size: "Medium"       },
+  3:  { name: "Front — top-left",    size: "Medium"       },
+  4:  { name: "Right — middle",      size: "XL (4× area)" },
+  5:  { name: "Left — middle",       size: "Tall vertical"},
+  6:  { name: "Front — top-right",   size: "Medium"       },
+  7:  { name: "Front — center",      size: "Medium+"      },
+  8:  { name: "Front — bottom-left", size: "Medium"       },
+  9:  { name: "Front — bottom-right",size: "Medium"       },
+  10: { name: "Left — bottom",       size: "Tall vertical"},
+};
+
+const bidInput      = document.getElementById("bid-input");
+const bidCurrent    = document.getElementById("bid-current");
+const bidCurrentBid = document.getElementById("bid-current-bidder");
+const bidCountWrap  = document.getElementById("bid-count-wrap");
+const bidCountEl    = document.getElementById("bid-count");
+const bidMinEl      = document.getElementById("bid-min");
+const bidSubmit     = document.getElementById("bid-submit");
+const bidSubmitAmt  = document.getElementById("bid-submit-amt");
+const bidTitleEl    = document.getElementById("bid-modal-title");
+const bidSpotName   = document.getElementById("bid-spot-name");
+const bidSpotSize   = document.getElementById("bid-spot-size");
+const bidSpotDims   = document.getElementById("bid-spot-dims");
+const depTotal      = document.getElementById("dep-total");
+const depAmount     = document.getElementById("dep-amount");
+const depAmount2    = document.getElementById("dep-amount-2");
+const brandNameEl   = document.getElementById("brand-name");
+const brandEmailEl  = document.getElementById("brand-email");
+const brandWebEl    = document.getElementById("brand-website");
+const brandXEl      = document.getElementById("brand-x");
+const logoInput     = document.getElementById("logo-input");
+const logoDropEl    = document.getElementById("logo-drop");
+const logoDropInner = document.getElementById("logo-drop-inner");
+const logoPreview   = document.getElementById("logo-preview");
+const logoPreviewImg= document.getElementById("logo-preview-img");
+const logoRemoveBtn = document.getElementById("logo-remove");
+let uploadedLogoDataUrl = null;
 
 function openBidModal(spotId) {
   const spot = state.spots[spotId];
   const current = spot ? spot.amount : 0;
   const min = current ? current + MIN_INCREMENT : STARTING_BID;
+  const meta = SPOT_META[spotId] || { name: "Sticker", size: "Medium" };
+  const bidCount = spot ? (spot.bidCount || 1) : 0;
 
-  document.getElementById("bid-spot-label").textContent = String(spotId).padStart(2, "0");
+  // Header
+  bidTitleEl.innerHTML = `Spot ${spotId} · <span id="bid-spot-name">${escapeHtml(meta.name)}</span>`;
+  bidSpotSize.textContent = `${meta.size} sticker`;
+  const dims = computeStickerDimsForSpot(spotId);
+  bidSpotDims.textContent = dims ? `${dims.w} × ${dims.h} cm` : "";
   bidCurrent.textContent = current.toLocaleString();
-  bidMinEl.textContent = min;
-  bidTitleEl.textContent = current ? "Outbid this spot" : "Bid on this spot";
+  bidCurrentBid.textContent = spot?.bidderMasked ? ` by ${spot.bidderMasked}` : "";
+  bidCountEl.textContent = bidCount;
+  bidCountWrap.hidden = bidCount === 0;
 
-  // Quick-bid chips: min, +$1, +$2, +$5
-  const presets = [min, min + 1, min + 2, min + 5];
-  bidQuickEl.innerHTML = presets
-    .map((p, i) => `<button type="button" class="chip${i === 0 ? " active" : ""}" data-val="${p}">$${p}</button>`)
-    .join("");
-  bidQuickEl.querySelectorAll(".chip").forEach(btn => {
-    btn.addEventListener("click", () => {
-      bidInput.value = btn.dataset.val;
-      syncSubmit();
-      highlightActiveChip();
-    });
-  });
-
+  // Amount input
   bidInput.min = min;
   bidInput.value = min;
-  bidInput.oninput = () => { syncSubmit(); highlightActiveChip(); };
-  syncSubmit();
+  bidMinEl.textContent = min;
+  bidInput.oninput = updateDeposit;
+  updateDeposit();
+
+  // Reset fields for new-bid state
+  document.getElementById("bid-form").reset();
+  bidInput.value = min;
+  updateDeposit();
+  clearLogo();
+
+  // Change primary button verb: "Bid" vs "Outbid <name>"
+  const verbTxt = spot ? `Outbid ${spot.bidderMasked || "current bidder"}` : "Bid";
+  bidSubmit.innerHTML = `${escapeHtml(verbTxt)} · <span id="bid-submit-amt">$${min}</span>`;
 
   document.getElementById("bid-form").dataset.spotId = spotId;
   document.getElementById("bid-modal").hidden = false;
   bidInput.focus();
   bidInput.select();
 }
-function syncSubmit() {
+
+// Live update: your-bid → deposit (20%) → submit button label
+function updateDeposit() {
   const v = parseInt(bidInput.value, 10);
-  bidSubmitAmt.textContent = isFinite(v) ? v.toLocaleString() : "—";
+  if (!isFinite(v) || v < 1) {
+    depTotal.textContent = depAmount.textContent = depAmount2.textContent = "—";
+    return;
+  }
+  const dep = Math.max(1, Math.round(v * 0.20));
+  depTotal.textContent = v.toLocaleString();
+  depAmount.textContent = dep.toLocaleString();
+  depAmount2.textContent = dep.toLocaleString();
+  const amtEl = document.getElementById("bid-submit-amt");
+  if (amtEl) amtEl.textContent = `$${v.toLocaleString()}`;
 }
-function highlightActiveChip() {
-  const v = parseInt(bidInput.value, 10);
-  bidQuickEl.querySelectorAll(".chip").forEach(c => {
-    c.classList.toggle("active", parseInt(c.dataset.val, 10) === v);
-  });
+
+// Rough physical dimensions (baseline sticker ~3.7×2.6 cm, scaled by per-axis mul).
+function computeStickerDimsForSpot(spotId) {
+  const cfg = SPOT_CONFIG.find(s => s.id === spotId);
+  if (!cfg) return null;
+  const wBase = 3.7, hBase = 2.6;
+  const wMul = cfg.wMul ?? cfg.sizeMul ?? 1.0;
+  const hMul = cfg.hMul ?? cfg.sizeMul ?? 1.0;
+  return { w: (wBase * wMul).toFixed(1), h: (hBase * hMul).toFixed(1) };
 }
+
 function closeBidModal() { document.getElementById("bid-modal").hidden = true; }
 document.getElementById("modal-close").addEventListener("click", closeBidModal);
 document.getElementById("bid-modal").addEventListener("click", (e) => {
   if (e.target.id === "bid-modal") closeBidModal();
 });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeBidModal(); });
-document.getElementById("bid-form").addEventListener("submit", (e) => {
+
+// Logo file → dataURL preview
+logoInput.addEventListener("change", (e) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    uploadedLogoDataUrl = reader.result;
+    logoPreviewImg.src = reader.result;
+    logoPreview.hidden = false;
+    logoDropInner.hidden = true;
+  };
+  reader.readAsDataURL(file);
+});
+logoRemoveBtn.addEventListener("click", (e) => {
+  e.preventDefault();
+  clearLogo();
+});
+function clearLogo() {
+  uploadedLogoDataUrl = null;
+  logoInput.value = "";
+  logoPreview.hidden = true;
+  logoDropInner.hidden = false;
+}
+// Drag & drop
+["dragover", "dragenter"].forEach(ev =>
+  logoDropEl.addEventListener(ev, (e) => { e.preventDefault(); logoDropEl.classList.add("drag"); })
+);
+["dragleave", "dragend", "drop"].forEach(ev =>
+  logoDropEl.addEventListener(ev, () => logoDropEl.classList.remove("drag"))
+);
+logoDropEl.addEventListener("drop", (e) => {
+  e.preventDefault();
+  const file = e.dataTransfer.files?.[0];
+  if (!file) return;
+  logoInput.files = e.dataTransfer.files;
+  const evt = new Event("change", { bubbles: true });
+  logoInput.dispatchEvent(evt);
+});
+
+document.getElementById("bid-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const form = e.target;
   const spotId = parseInt(form.dataset.spotId, 10);
-  const email = form.email.value.trim();
-  const amount = parseInt(form.amount.value, 10);
+  const brand   = brandNameEl.value.trim();
+  const email   = brandEmailEl.value.trim();
+  const website = brandWebEl.value.trim();
+  const xHandle = brandXEl.value.trim();
+  const amount  = parseInt(bidInput.value, 10);
   const current = state.spots[spotId] ? state.spots[spotId].amount : 0;
   const min = current ? current + MIN_INCREMENT : STARTING_BID;
   if (amount < min) { alert(`Minimum bid is $${min}`); return; }
+
+  const logoFile = logoInput.files?.[0] || null;
+
+  // Optimistic local update — snappy UI
+  const prevCount = state.spots[spotId]?.bidCount || 0;
   state.spots[spotId] = {
-    amount, bidder: email, bidderMasked: maskEmail(email), at: Date.now(),
+    amount,
+    brand,
+    bidder: email,
+    bidderMasked: maskEmail(email),
+    website: website || null,
+    x_handle: xHandle || null,
+    logo: uploadedLogoDataUrl || null,   // dataURL preview until server URL arrives
+    bidCount: prevCount + 1,
+    at: Date.now(),
   };
   saveState(state);
   buildStickers();
@@ -674,6 +814,20 @@ document.getElementById("bid-form").addEventListener("submit", (e) => {
   refreshTotals();
   closeBidModal();
   form.reset();
+  clearLogo();
+
+  // Persist to Supabase (silent fallback if tables aren't set up yet)
+  try {
+    const saved = await submitBidToSupabase({
+      spotId, amount, brand, email, website, xHandle, logoFile,
+    });
+    if (saved?.logoUrl) {
+      state.spots[spotId].logo = saved.logoUrl;
+      saveState(state);
+    }
+  } catch (err) {
+    console.warn("[bmb] Bid saved locally but not synced to Supabase:", err.message || err);
+  }
 });
 
 // ---------- Countdown ----------
@@ -699,9 +853,80 @@ function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;" }[c]));
 }
 
+// ---------- Supabase load: fetch current top bid per spot ----------
+async function syncFromSupabase() {
+  try {
+    const { data, error } = await sb.from("bmb_current_bids").select("*");
+    if (error) throw error;
+    if (!Array.isArray(data)) return;
+    // Merge into local state (Supabase is authoritative for public bid info)
+    let changed = false;
+    data.forEach(row => {
+      const local = state.spots[row.spot_id];
+      const amount = centsToDollars(row.amount_cents);
+      const brand = row.brand || "";
+      if (!local || amount > local.amount) {
+        state.spots[row.spot_id] = {
+          amount,
+          brand,
+          bidder: row.brand,        // no email exposed via view
+          bidderMasked: brand,
+          website: row.website || null,
+          x_handle: row.x_handle || null,
+          logo: row.logo_url || null,
+          bidCount: (local?.bidCount || 0) + 1,
+          at: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
+        };
+        changed = true;
+      }
+    });
+    if (changed) {
+      saveState(state);
+      buildStickers();
+      refreshGrid();
+      refreshTotals();
+    }
+  } catch (err) {
+    console.warn("[bmb] Supabase sync failed — using localStorage only.", err.message || err);
+  }
+}
+
+// ---------- Supabase: upload logo to storage + insert bid ----------
+async function submitBidToSupabase({ spotId, amount, brand, email, website, xHandle, logoFile }) {
+  let logoUrl = null;
+  if (logoFile) {
+    // Upload to bmb-logos bucket
+    const ext = (logoFile.name.split(".").pop() || "png").toLowerCase();
+    const key = `${spotId}/${Date.now()}-${crypto.randomUUID().slice(0, 8)}.${ext}`;
+    const { error: upErr } = await sb.storage.from("bmb-logos").upload(key, logoFile, {
+      contentType: logoFile.type,
+      cacheControl: "3600",
+      upsert: false,
+    });
+    if (upErr) throw new Error(`Logo upload failed: ${upErr.message}`);
+    const { data: pub } = sb.storage.from("bmb-logos").getPublicUrl(key);
+    logoUrl = pub?.publicUrl || null;
+  }
+
+  const { data, error } = await sb.from("bmb_bids").insert({
+    spot_id: spotId,
+    amount_cents: dollarsToCents(amount),
+    brand,
+    email,
+    website: website || null,
+    x_handle: xHandle || null,
+    logo_url: logoUrl,
+  }).select().single();
+  if (error) throw new Error(`Bid insert failed: ${error.message}`);
+  return { ...data, logoUrl };
+}
+
 // ---------- Init ----------
 mountGrid();
 refreshTotals();
 tickCountdown();
 setInterval(tickCountdown, 30 * 1000);
 resize();
+syncFromSupabase();
+// Poll every 20s for competing bids
+setInterval(syncFromSupabase, 20 * 1000);

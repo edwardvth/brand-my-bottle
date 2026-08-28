@@ -12,7 +12,8 @@
   {
     "imports": {
       "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
-      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/",
+      "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@2"
     }
   }
   </script>
@@ -111,29 +112,96 @@
     <p class="footnote">3D model: <a href="https://sketchfab.com/3d-models" target="_blank" rel="noopener">Strebicusy · CC-BY</a></p>
   </footer>
 
-  <!-- Bid modal — compact, focused on the ask: how much + who -->
+  <!-- Bid modal — matches the reference: sticker meta, current bid, deposit
+       note, brand fields, logo upload, Outbid button. -->
   <div id="bid-modal" class="modal" hidden>
-    <div class="modal-card">
+    <div class="modal-card modal-card-lg">
       <button class="modal-close" id="modal-close" aria-label="Close">×</button>
-      <div class="eyebrow static">Spot <span id="bid-spot-label">—</span></div>
-      <h3 id="bid-modal-title">Bid</h3>
-      <p class="modal-sub">Current <strong>$<span id="bid-current">0</span></strong> · min next <strong>$<span id="bid-min">1</span></strong></p>
 
-      <form id="bid-form">
-        <div class="bid-quick" id="bid-quick"><!-- injected: $1, $2, $5, +$5 --></div>
-        <label class="bid-amount-wrap">
-          <span class="lbl">Your bid</span>
-          <div class="input-with-prefix">
-            <span class="prefix">$</span>
+      <!-- Header -->
+      <div class="bm-header">
+        <h3 id="bid-modal-title">Spot 1 · <span id="bid-spot-name">Front top</span></h3>
+        <p class="bm-meta"><span id="bid-spot-size">Large sticker</span> · <span id="bid-spot-dims">—</span></p>
+        <p class="bm-current">
+          Current bid <strong>$<span id="bid-current">0</span></strong>
+          <span id="bid-current-bidder"></span>
+          <span id="bid-count-wrap"> · <span id="bid-count">0</span> bids</span>
+        </p>
+      </div>
+
+      <form id="bid-form" class="bm-form">
+        <!-- Amount -->
+        <div class="bm-field">
+          <label class="lbl" for="bid-input">Your bid (USD)</label>
+          <div class="input-with-suffix">
             <input type="number" name="amount" required min="1" step="1" id="bid-input" />
+            <span class="suffix">$</span>
           </div>
-        </label>
-        <label>
-          <span class="lbl">Email <span class="lbl-fine">(so we can email you if outbid)</span></span>
-          <input type="email" name="email" required placeholder="you@company.com" />
-        </label>
-        <button type="submit" class="btn-primary" id="bid-submit">Place bid — $<span id="bid-submit-amt">1</span></button>
-        <p class="modal-fine">Preview only. No charge yet.</p>
+          <p class="bm-hint">Minimum <strong>$<span id="bid-min">1</span></strong></p>
+        </div>
+
+        <!-- Deposit card -->
+        <div class="bm-deposit">
+          <div class="dep-row">
+            <span>Deposit, 20% of $<span id="dep-total">1</span></span>
+            <strong>$<span id="dep-amount">1</span></strong>
+          </div>
+          <div class="dep-row dep-strong">
+            <span>Due now</span>
+            <strong>$<span id="dep-amount-2">1</span></strong>
+          </div>
+          <p class="dep-fine">Refunded in full if you don't win. If you do, the remaining is charged to the same card when the auction closes.</p>
+        </div>
+
+        <!-- Brand row -->
+        <div class="bm-row">
+          <div class="bm-field">
+            <label class="lbl" for="brand-name">Brand name</label>
+            <input type="text" name="brand" id="brand-name" required placeholder="Microsoft" />
+          </div>
+          <div class="bm-field">
+            <label class="lbl" for="brand-email">Email</label>
+            <input type="email" name="email" id="brand-email" required placeholder="you@microsoft.com" />
+          </div>
+        </div>
+
+        <!-- Optional row -->
+        <div class="bm-row">
+          <div class="bm-field">
+            <label class="lbl" for="brand-website">Website <span class="lbl-fine">(optional)</span></label>
+            <input type="url" name="website" id="brand-website" placeholder="https://microsoft.com" />
+          </div>
+          <div class="bm-field">
+            <label class="lbl" for="brand-x">X handle <span class="lbl-fine">(optional)</span></label>
+            <input type="text" name="x_handle" id="brand-x" placeholder="@microsoft" />
+          </div>
+        </div>
+
+        <!-- Logo upload -->
+        <div class="bm-field">
+          <label class="lbl">Logo</label>
+          <label class="bm-logo-drop" id="logo-drop">
+            <input type="file" name="logo" id="logo-input" accept="image/png,image/jpeg,image/svg+xml" hidden />
+            <div class="logo-drop-inner" id="logo-drop-inner">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="17 8 12 3 7 8"/>
+                <line x1="12" y1="3" x2="12" y2="15"/>
+              </svg>
+              <div class="logo-drop-text"><strong>Upload your logo</strong></div>
+              <div class="logo-drop-fine">PNG · JPG · SVG</div>
+            </div>
+            <div class="logo-preview" id="logo-preview" hidden>
+              <img id="logo-preview-img" alt="Logo preview" />
+              <button type="button" class="logo-remove" id="logo-remove" aria-label="Remove logo">×</button>
+            </div>
+          </label>
+        </div>
+
+        <button type="submit" class="btn-primary btn-bid-submit" id="bid-submit">
+          Bid <span id="bid-submit-amt">$1</span>
+        </button>
+        <p class="bm-trust">I check every logo by hand before it goes on the bottle.</p>
       </form>
     </div>
   </div>

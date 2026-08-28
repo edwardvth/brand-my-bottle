@@ -144,13 +144,17 @@ em { font-family: var(--serif); font-style: italic; font-weight: 400; letter-spa
     0 0 0 4px rgba(14, 124, 123, 0.25),
     0 8px 24px rgba(14, 124, 123, 0.35),
     0 0 40px rgba(94, 234, 212, 0.5);
-  /* pointer-events:none — the pill is decorative. Clicks pass through to the
-     canvas, which already opens the modal via raycast on the sticker under the
-     cursor. This kills the mouse-enters-pill → canvas-loses-mouse flicker loop. */
-  pointer-events: none;
+  /* pointer-events:auto — the pill IS clickable now. Flicker is prevented in
+     JS via relatedTarget check on canvas pointerleave (see app.js). */
+  pointer-events: auto;
+  cursor: pointer;
   z-index: 10;
   animation: pill-glow 1.6s ease-in-out infinite;
   white-space: nowrap;
+}
+.hover-pill:hover {
+  transform: translate(-50%, -50%) scale(1.05);
+  transition: transform 100ms ease;
 }
 .hover-pill[hidden] { display: none; }
 .hover-pill .pill-sep { opacity: 0.6; margin: 0 2px; }
@@ -378,46 +382,123 @@ footer a:hover { color: var(--teal); }
 .btn-primary:hover { background: var(--teal-deep); }
 .modal-fine { font-size: 12px; color: var(--muted); text-align: center; margin: 14px 0 0; }
 
-/* Quick bid preset chips */
-.bid-quick {
-  display: flex; gap: 6px; flex-wrap: wrap;
-  margin-bottom: 16px;
+/* ---------- Rebuilt bid modal (matches reference: image #31) ---------- */
+.modal-card-lg {
+  max-width: 520px;
+  padding: 28px 30px 24px;
+  max-height: 90vh;
+  overflow-y: auto;
 }
-.bid-quick .chip {
-  flex: 1 1 auto;
-  padding: 8px 12px;
-  border: 1px solid var(--line);
-  background: white;
-  border-radius: 999px;
-  font-family: var(--sans);
-  font-size: 13px; font-weight: 600;
-  color: var(--ink); cursor: pointer;
-  transition: all 150ms ease;
-  min-width: 60px;
+.bm-header { margin-bottom: 20px; }
+.bm-header h3 {
+  font-family: var(--serif); font-weight: 400;
+  font-size: 26px; line-height: 1.15; letter-spacing: -0.015em;
+  margin: 0 0 4px;
 }
-.bid-quick .chip:hover {
-  border-color: var(--teal);
-  background: var(--sea-tint);
-  color: var(--teal-deep);
-}
-.bid-quick .chip.active {
-  background: var(--teal); color: white; border-color: var(--teal-deep);
-}
+.bm-meta { color: var(--muted); font-size: 13px; margin: 0 0 8px; }
+.bm-current { color: var(--ink-2); font-size: 14px; margin: 0; }
+.bm-current strong { color: var(--ink); font-weight: 700; }
+.bm-current #bid-current-bidder { color: var(--muted); }
 
-/* $ prefix input */
-.input-with-prefix {
+.bm-form { display: flex; flex-direction: column; gap: 14px; }
+.bm-field { display: flex; flex-direction: column; gap: 6px; }
+.bm-row {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+}
+.bm-hint { font-size: 12px; color: var(--muted); margin: 4px 0 0; }
+.bm-hint strong { color: var(--ink); }
+
+/* Suffix input */
+.input-with-suffix {
   position: relative;
 }
-.input-with-prefix .prefix {
-  position: absolute; left: 14px; top: 50%;
+.input-with-suffix .suffix {
+  position: absolute; right: 14px; top: 50%;
   transform: translateY(-50%);
   color: var(--muted); font-family: var(--serif); font-size: 18px;
   pointer-events: none;
 }
-.input-with-prefix input {
-  padding-left: 28px !important;
+.input-with-suffix input { padding-right: 32px !important; }
+
+/* Deposit card */
+.bm-deposit {
+  background: var(--sea-tint);
+  border: 1px solid var(--line-soft);
+  padding: 14px 16px;
+  margin: 4px 0 6px;
+  font-size: 13px;
 }
-.bid-amount-wrap { margin-bottom: 16px; }
+.dep-row {
+  display: flex; justify-content: space-between; align-items: baseline;
+  padding: 4px 0;
+  color: var(--ink-2);
+}
+.dep-row.dep-strong {
+  color: var(--ink); font-weight: 600; font-size: 15px;
+  border-top: 1px solid var(--line-soft);
+  margin-top: 4px; padding-top: 8px;
+}
+.dep-row strong { font-family: var(--serif); font-size: 17px; }
+.dep-fine { font-size: 12px; color: var(--muted); margin: 10px 0 0; line-height: 1.45; }
+
+/* Logo upload drop zone */
+.bm-logo-drop {
+  display: block;
+  border: 1.5px dashed var(--line);
+  padding: 24px 16px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 150ms ease;
+  background: white;
+  position: relative;
+}
+.bm-logo-drop:hover {
+  border-color: var(--teal);
+  background: var(--sea-tint);
+}
+.bm-logo-drop.drag {
+  border-color: var(--teal); background: var(--sea-tint); border-style: solid;
+}
+.logo-drop-inner {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  color: var(--muted);
+}
+.logo-drop-inner svg { color: var(--ink-2); margin-bottom: 2px; }
+.logo-drop-text { font-size: 14px; color: var(--ink); }
+.logo-drop-fine { font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+.logo-preview {
+  position: relative;
+  display: flex; align-items: center; justify-content: center;
+  min-height: 96px;
+}
+.logo-preview img { max-height: 96px; max-width: 100%; object-fit: contain; }
+.logo-remove {
+  position: absolute; top: 4px; right: 4px;
+  background: white; border: 1px solid var(--line);
+  width: 24px; height: 24px; border-radius: 50%;
+  cursor: pointer; font-size: 16px; line-height: 1;
+  display: flex; align-items: center; justify-content: center;
+  padding: 0; color: var(--ink);
+}
+.logo-remove:hover { background: var(--paper-2); }
+
+.btn-bid-submit {
+  margin-top: 6px;
+  padding: 14px 16px;
+  font-size: 15px;
+  background: var(--teal);
+  color: white;
+}
+.btn-bid-submit:hover { background: var(--teal-deep); }
+.bm-trust {
+  text-align: center; font-size: 12px; color: var(--muted);
+  margin: 12px 0 0; font-style: italic;
+}
+
+/* Mobile: stack the 2-col rows */
+@media (max-width: 520px) {
+  .bm-row { grid-template-columns: 1fr; }
+}
 
 /* Reduced motion */
 @media (prefers-reduced-motion: reduce) {
