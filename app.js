@@ -654,36 +654,26 @@ function raycastSticker(clientX, clientY) {
   return null;
 }
 
-// When a touch pointerup handles an occupied-sticker tap by showing the pill,
-// the browser still fires a synthetic click ~50ms later. Set this flag from
-// the touch handler so the click handler below skips its would-be openBidModal.
-let _suppressNextStickerClick = false;
+// Sticker click handler. On touch devices, the FIRST tap on an occupied
+// sticker shows the info pill (brand + website + X + Outbid). The SECOND
+// tap opens the bid modal — either by tapping the Outbid button on the
+// pill, or by tapping the same sticker again. Empty stickers go straight
+// to the bid modal on any input.
+const _isTouchDevice = () =>
+  (typeof window !== "undefined") &&
+  (window.matchMedia && window.matchMedia("(hover: none)").matches);
 
 canvasEl.addEventListener("click", (e) => {
   if (didDrag) return;
-  if (_suppressNextStickerClick) { _suppressNextStickerClick = false; return; }
-  const hit = raycastSticker(e.clientX, e.clientY);
-  if (hit) openBidModal(hit.userData.spotId);
-});
-
-// Mobile: a tap on a sticker should open the bid modal DIRECTLY (there is
-// no hover, so the pill's click-to-bid flow is unreachable without this).
-canvasEl.addEventListener("pointerup", (e) => {
-  if (e.pointerType !== "touch") return;
-  if (didDrag) return;
   const hit = raycastSticker(e.clientX, e.clientY);
   if (!hit) return;
-  e.preventDefault();
   const spotId = hit.userData.spotId;
   const spot   = state.spots[spotId];
-  // For OCCUPIED stickers, first tap shows the info pill (brand + website
-  // + X handle + Outbid button) — same info a desktop hover shows. User
-  // taps Outbid to open the bid modal. For OPEN stickers, jump straight
-  // to the bid modal (nothing to preview).
-  if (spot) {
-    // Suppress the synthetic click that follows this touch so the older
-    // click handler doesn't also open the bid modal on top of our pill.
-    _suppressNextStickerClick = true;
+  const touch  = _isTouchDevice();
+
+  // Touch + occupied + pill not already showing this sticker → show pill,
+  // don't open modal yet.
+  if (touch && spot && (pillEl.hidden || hoveredSpotId !== spotId)) {
     hoveredSpotId = spotId;
     const price = spot.amount;
     pillVerbEl.textContent  = "Outbid";
@@ -691,10 +681,15 @@ canvasEl.addEventListener("pointerup", (e) => {
     fillPillInfo(spot);
     positionPillAt(hit);
     pillEl.hidden = false;
-  } else {
-    openBidModal(spotId);
+    return;
   }
+  // Everything else (desktop, empty sticker, second-tap on same sticker) →
+  // open the bid modal directly.
+  openBidModal(spotId);
 });
+
+// (Touch tap → pill or bid modal is handled by the click handler above,
+// which branches on _isTouchDevice() + spot state.)
 // Dismiss the pill when the user taps outside the canvas or the pill.
 document.addEventListener("pointerdown", (e) => {
   if (!pillEl || pillEl.hidden) return;
