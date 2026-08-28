@@ -25,29 +25,32 @@ const AUCTION_END = Date.now() + 12 * 86400 * 1000 + 14 * 3600 * 1000;
 const MIN_INCREMENT = 1;
 const STARTING_BID = 1;
 
-// 10 stickers.
-//  - Spot 1: LONG horizontal top banner (front)
-//  - Spot 2: medium on the back-right (moved right from centered-back)
+// 11 stickers (user OK'd going past 10 to restore the below-spot-4 tile).
+//  - Spot 1:  LONG horizontal top banner (front, taller)
+//  - Spot 2:  medium on the back-right, aligned above spot 4's left edge
 //  - Spots 3/6/7/8/9: front die-5 quincunx (TL, TR, center, BL, BR)
-//  - Spot 4: XL quad on right side
+//  - Spot 4:  XL quad on right side (upper)
 //  - Spots 5, 10: extra-wide tall verticals on left side
-const _TAU3 = (Math.PI * 2) / 3;   // 120°
-const _DIE  = 0.42;                // ± arc for front die corners
+//  - Spot 11: XL quad on right side (lower — the "spot beneath spot 4")
+const _TAU3 = (Math.PI * 2) / 3;    // 120°
+const _DIE_R = -0.72;               // right-column die corners (viewer's right = -theta)
+const _DIE_L =  0.42;               // left-column die corners  (viewer's left  = +theta)
 const SPOT_CONFIG = [
-  // Row 1 (top): banner on front + medium on back
-  { id: 1,  y:  0.35, theta:  0,               wMul: 2.60, hMul: 1.00 }, // taller banner
-  { id: 2,  y:  0.35, theta:  Math.PI - 0.55,  wMul: 1.15, hMul: 1.15 }, // moved right from back-center
-  // Front die-5 top row + right-side quad + left tall
-  { id: 3,  y: -0.05, theta: -_DIE,            wMul: 1.10, hMul: 1.20 }, // die TL
-  { id: 4,  y: -0.05, theta:  _TAU3,           wMul: 2.00, hMul: 2.00 }, // QUAD right side
-  { id: 5,  y: -0.05, theta: -_TAU3,           wMul: 1.60, hMul: 2.80 }, // TALL vertical (wider)
-  { id: 6,  y: -0.05, theta:  _DIE,            wMul: 1.10, hMul: 1.20 }, // die TR
+  // Row 1 (top): banner on front + medium above spot 4
+  { id: 1,  y:  0.35, theta:  0,               wMul: 2.60, hMul: 1.10 }, // taller banner
+  { id: 2,  y:  0.35, theta:  _TAU3 + 0.45,    wMul: 1.15, hMul: 1.15 }, // sits above spot 4 with left edges aligned (offset = spot4_half_arc − spot2_half_arc)
+  // Front die-5 top row + side stickers
+  { id: 3,  y: -0.05, theta:  _DIE_R,          wMul: 1.10, hMul: 1.35 }, // die TL (top-right of view), moved further right, taller
+  { id: 4,  y: -0.05, theta:  _TAU3,           wMul: 2.00, hMul: 2.00 }, // QUAD right side (upper)
+  { id: 5,  y: -0.05, theta: -_TAU3,           wMul: 1.60, hMul: 2.80 }, // TALL vertical left (wider)
+  { id: 6,  y: -0.05, theta:  _DIE_L,          wMul: 1.10, hMul: 1.35 }, // die TR (top-left of view), taller
   // Front die-5 CENTER
   { id: 7,  y: -0.45, theta:  0,               wMul: 1.30, hMul: 1.30 }, // die CENTER
-  // Front die-5 bottom row + left tall
-  { id: 8,  y: -0.85, theta: -_DIE,            wMul: 1.10, hMul: 1.20 }, // die BL
-  { id: 9,  y: -0.85, theta:  _DIE,            wMul: 1.10, hMul: 1.20 }, // die BR
-  { id: 10, y: -0.85, theta: -_TAU3,           wMul: 1.60, hMul: 2.80 }, // TALL vertical (wider)
+  // Front die-5 bottom row + side stickers
+  { id: 8,  y: -0.85, theta:  _DIE_R,          wMul: 1.10, hMul: 1.35 }, // die BL, moved further right, taller
+  { id: 9,  y: -0.85, theta:  _DIE_L,          wMul: 1.10, hMul: 1.35 }, // die BR, taller
+  { id: 10, y: -0.85, theta: -_TAU3,           wMul: 1.60, hMul: 2.80 }, // TALL vertical left (wider)
+  { id: 11, y: -0.85, theta:  _TAU3,           wMul: 2.00, hMul: 2.00 }, // QUAD right side (lower) — the spot beneath spot 4
 ];
 const TOTAL = SPOT_CONFIG.length;
 
@@ -124,13 +127,15 @@ canvasEl.addEventListener("pointercancel", () => { controls.autoRotate = true; }
 // wheel doesn't pause spin — just a quick zoom
 canvasEl.addEventListener("wheel", (e) => { /* spin continues */ }, { passive: true });
 
-// Debug overlay
-function setDebug(text) {
+// Debug overlay — silent in production; logs to console only. Errors still
+// surface via an overlay when the GLB fails to load.
+function setDebug(text, opts = {}) {
+  if (!opts.error) { console.debug("[bmb]", text); return; }
   let d = document.getElementById("debug");
   if (!d) {
     d = document.createElement("div");
     d.id = "debug";
-    d.style.cssText = "position:fixed;top:8px;left:8px;z-index:9999;background:rgba(14,14,14,0.85);color:#f5f1ea;font:11px/1.4 ui-monospace,Menlo,monospace;padding:8px 10px;border-radius:6px;max-width:360px;pointer-events:none;white-space:pre-wrap;";
+    d.style.cssText = "position:fixed;top:8px;left:8px;z-index:9999;background:#a1200f;color:#fff;font:12px/1.4 ui-monospace,Menlo,monospace;padding:10px 12px;border-radius:6px;max-width:360px;pointer-events:none;white-space:pre-wrap;";
     document.body.appendChild(d);
   }
   d.textContent = text;
@@ -290,7 +295,7 @@ loader.load(MODEL_URL, (gltf) => {
   );
 }, undefined, (err) => {
   console.error("GLB load error:", err);
-  setDebug(`GLB failed to load: ${err.message || err}`);
+  setDebug(`GLB failed to load: ${err.message || err}`, { error: true });
 });
 
 // ---------- Helpers ----------
@@ -353,49 +358,125 @@ function createCurvedRect(radius, centerTheta, arcAngle, height, centerY, segmen
 }
 
 // ---------- Sticker texture ----------
-function makeStickerTexture(spotId, price, taken, geomAspect = 1.35) {
+// Cache logo <img> loads across re-renders so we don't refetch the same URL
+// every time buildStickers() runs.
+const _logoImgCache = new Map(); // src -> HTMLImageElement (may be still-loading)
+function _loadLogoImage(src) {
+  if (!src) return null;
+  const cached = _logoImgCache.get(src);
+  if (cached) return cached;
+  const img = new Image();
+  img.crossOrigin = "anonymous";
+  img.src = src;
+  _logoImgCache.set(src, img);
+  return img;
+}
+
+function makeStickerTexture(spotId, price, taken, geomAspect = 1.35, opts = {}) {
+  const { brand = null, logoSrc = null } = opts;
   const c = document.createElement("canvas");
   // Match canvas aspect to the sticker's world-geometry aspect so text renders
   // at true proportions instead of getting horizontally squashed.
   c.width = 640;
   c.height = Math.round(c.width / geomAspect);
   const ctx = c.getContext("2d");
-  ctx.clearRect(0, 0, c.width, c.height);
-
-  const pad = Math.round(Math.min(c.width, c.height) * 0.07);
-  const paper = "#f5f1ea";
-
-  if (taken) {
-    ctx.fillStyle = paper;
-    ctx.fillRect(pad, pad, c.width - pad * 2, c.height - pad * 2);
-  } else {
-    ctx.fillStyle = "rgba(245,241,234,0.18)";
-    ctx.fillRect(pad, pad, c.width - pad * 2, c.height - pad * 2);
-    ctx.strokeStyle = paper;
-    ctx.lineWidth = 8;
-    ctx.setLineDash([30, 18]);
-    ctx.strokeRect(pad + 4, pad + 4, c.width - pad * 2 - 8, c.height - pad * 2 - 8);
-    ctx.setLineDash([]);
-  }
-
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-
-  // Scale text sizes to canvas height so text stays big regardless of aspect
-  const labelSize = Math.round(c.height * 0.12);
-  const priceSize = Math.round(c.height * 0.42);
-
-  ctx.font = `bold ${labelSize}px Inter, -apple-system, sans-serif`;
-  ctx.fillStyle = taken ? "rgba(14,14,14,0.55)" : paper;
-  ctx.fillText(`SPOT ${String(spotId).padStart(2, "0")}`, c.width / 2, c.height * 0.28);
-
-  ctx.font = `bold ${priceSize}px Georgia, "Times New Roman", serif`;
-  ctx.fillStyle = taken ? "#0e0e0e" : paper;
-  ctx.fillText(`$${price.toLocaleString()}`, c.width / 2, c.height * 0.62);
-
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
+
+  const paper = "#f5f1ea";
+  const ink   = "#0e0e0e";
+
+  // Async logo load: draw placeholder first, then redraw + flag texture dirty
+  // when the image lands.
+  const logoImg = taken && logoSrc ? _loadLogoImage(logoSrc) : null;
+
+  function draw() {
+    ctx.clearRect(0, 0, c.width, c.height);
+    const pad = Math.round(Math.min(c.width, c.height) * 0.07);
+
+    if (taken) {
+      // Paper card background
+      ctx.fillStyle = paper;
+      ctx.fillRect(pad, pad, c.width - pad * 2, c.height - pad * 2);
+    } else {
+      // Dashed empty state
+      ctx.fillStyle = "rgba(245,241,234,0.18)";
+      ctx.fillRect(pad, pad, c.width - pad * 2, c.height - pad * 2);
+      ctx.strokeStyle = paper;
+      ctx.lineWidth = 8;
+      ctx.setLineDash([30, 18]);
+      ctx.strokeRect(pad + 4, pad + 4, c.width - pad * 2 - 8, c.height - pad * 2 - 8);
+      ctx.setLineDash([]);
+    }
+
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+
+    if (!taken) {
+      // Empty state: SPOT NN + $price stacked
+      const labelSize = Math.round(c.height * 0.12);
+      const priceSize = Math.round(c.height * 0.42);
+      ctx.font = `bold ${labelSize}px Inter, -apple-system, sans-serif`;
+      ctx.fillStyle = paper;
+      ctx.fillText(`SPOT ${String(spotId).padStart(2, "0")}`, c.width / 2, c.height * 0.28);
+      ctx.font = `bold ${priceSize}px Georgia, "Times New Roman", serif`;
+      ctx.fillStyle = paper;
+      ctx.fillText(`$${price.toLocaleString()}`, c.width / 2, c.height * 0.62);
+      return;
+    }
+
+    // TAKEN state — Mac-app tile: logo on top, brand name, $price beneath.
+    const inner = { x: pad, y: pad, w: c.width - pad * 2, h: c.height - pad * 2 };
+    // 55% of card height for the logo, 45% for text stack
+    const logoH = Math.round(inner.h * 0.55);
+    const textTop = inner.y + logoH + Math.round(inner.h * 0.02);
+    const brandSize = Math.round(inner.h * 0.14);
+    const priceSize = Math.round(inner.h * 0.20);
+
+    // Logo
+    if (logoImg && logoImg.complete && logoImg.naturalWidth > 0) {
+      const iw = logoImg.naturalWidth, ih = logoImg.naturalHeight;
+      const boxW = inner.w - Math.round(inner.h * 0.14);
+      const boxH = logoH - Math.round(inner.h * 0.06);
+      const scale = Math.min(boxW / iw, boxH / ih);
+      const dw = iw * scale, dh = ih * scale;
+      const dx = inner.x + (inner.w - dw) / 2;
+      const dy = inner.y + Math.round(inner.h * 0.05) + (boxH - dh) / 2;
+      ctx.drawImage(logoImg, dx, dy, dw, dh);
+    } else {
+      // Placeholder square while the image loads (or if no logo uploaded)
+      const boxW = Math.round(inner.h * 0.42);
+      const boxH = boxW;
+      const dx = inner.x + (inner.w - boxW) / 2;
+      const dy = inner.y + Math.round(inner.h * 0.08);
+      ctx.fillStyle = "rgba(14,14,14,0.08)";
+      ctx.fillRect(dx, dy, boxW, boxH);
+      if (brand) {
+        ctx.fillStyle = "rgba(14,14,14,0.55)";
+        ctx.font = `bold ${Math.round(boxH * 0.55)}px Inter, sans-serif`;
+        ctx.fillText(brand.slice(0, 1).toUpperCase(), dx + boxW / 2, dy + boxH / 2);
+      }
+    }
+
+    // Brand name
+    ctx.fillStyle = ink;
+    ctx.font = `600 ${brandSize}px Inter, -apple-system, sans-serif`;
+    const brandTxt = (brand || `Spot ${spotId}`).slice(0, 24);
+    ctx.fillText(brandTxt, c.width / 2, textTop + brandSize * 0.6);
+
+    // Price
+    ctx.fillStyle = ink;
+    ctx.font = `bold ${priceSize}px Georgia, "Times New Roman", serif`;
+    ctx.fillText(`$${price.toLocaleString()}`, c.width / 2, textTop + brandSize * 1.6 + priceSize * 0.4);
+  }
+
+  draw();
   tex.needsUpdate = true;
+
+  if (logoImg && !logoImg.complete) {
+    logoImg.addEventListener("load", () => { draw(); tex.needsUpdate = true; }, { once: true });
+    logoImg.addEventListener("error", () => { /* keep placeholder */ }, { once: true });
+  }
   return tex;
 }
 
@@ -457,7 +538,10 @@ function buildStickers() {
     const geomAspect = arcLength / stickerH;
 
     const geom = createCurvedRect(stickerRadius, cfg.theta, arcAngle, stickerH, yWorld);
-    const texture = makeStickerTexture(cfg.id, price, taken, geomAspect);
+    const texture = makeStickerTexture(cfg.id, price, taken, geomAspect, {
+      brand:   spot?.brand || null,
+      logoSrc: spot?.logo  || null,
+    });
     const material = new THREE.MeshBasicMaterial({
       map: texture,
       transparent: true,
@@ -624,22 +708,25 @@ function refreshTotals() {
   const high   = Math.max(0, ...vals.filter(Boolean).map(s => s.amount));
   document.getElementById("raised-amount").textContent = raised.toLocaleString();
   document.getElementById("taken-count").textContent = taken;
+  const totalEl = document.getElementById("taken-total");
+  if (totalEl) totalEl.textContent = TOTAL;
   document.getElementById("high-bid").textContent = `$${high.toLocaleString()}`;
 }
 
 // ---------- Bid modal ----------
 // Descriptive labels + rough physical sticker size (from SPOT_CONFIG sizeMul)
 const SPOT_META = {
-  1:  { name: "Front — top banner",  size: "Long banner"  },
-  2:  { name: "Back-right — upper",  size: "Medium"       },
-  3:  { name: "Front — top-left",    size: "Medium"       },
-  4:  { name: "Right — middle",      size: "XL (4× area)" },
-  5:  { name: "Left — middle",       size: "Tall vertical"},
-  6:  { name: "Front — top-right",   size: "Medium"       },
-  7:  { name: "Front — center",      size: "Medium+"      },
-  8:  { name: "Front — bottom-left", size: "Medium"       },
-  9:  { name: "Front — bottom-right",size: "Medium"       },
-  10: { name: "Left — bottom",       size: "Tall vertical"},
+  1:  { name: "Front — top banner",   size: "Long banner"  },
+  2:  { name: "Right — upper small",  size: "Medium"       },
+  3:  { name: "Front — top-right",    size: "Medium+"      },
+  4:  { name: "Right — upper",        size: "XL (4× area)" },
+  5:  { name: "Left — middle",        size: "Tall vertical"},
+  6:  { name: "Front — top-left",     size: "Medium+"      },
+  7:  { name: "Front — center",       size: "Medium+"      },
+  8:  { name: "Front — bottom-right", size: "Medium+"      },
+  9:  { name: "Front — bottom-left",  size: "Medium+"      },
+  10: { name: "Left — bottom",        size: "Tall vertical"},
+  11: { name: "Right — lower",        size: "XL (4× area)" },
 };
 
 const bidInput      = document.getElementById("bid-input");
@@ -795,38 +882,67 @@ document.getElementById("bid-form").addEventListener("submit", async (e) => {
 
   const logoFile = logoInput.files?.[0] || null;
 
-  // Optimistic local update — snappy UI
-  const prevCount = state.spots[spotId]?.bidCount || 0;
-  state.spots[spotId] = {
-    amount,
-    brand,
-    bidder: email,
-    bidderMasked: maskEmail(email),
-    website: website || null,
-    x_handle: xHandle || null,
-    logo: uploadedLogoDataUrl || null,   // dataURL preview until server URL arrives
-    bidCount: prevCount + 1,
-    at: Date.now(),
-  };
-  saveState(state);
-  buildStickers();
-  refreshGrid();
-  refreshTotals();
-  closeBidModal();
-  form.reset();
-  clearLogo();
+  // Bids are only recorded AFTER Stripe captures the 20% deposit — the row
+  // is written by the `bmb-stripe-webhook` Edge Function on
+  // `checkout.session.completed`. Do NOT optimistically pin the spot here:
+  // if we did, a user who abandons Stripe would visually own the spot until
+  // the next syncFromSupabase poll.
+  //
+  // Freeze the button so an impatient double-click doesn't open two Stripe
+  // sessions (each of which would ask for a deposit).
+  const submitBtn = document.getElementById("bid-submit");
+  const submitOrig = submitBtn?.innerHTML;
+  if (submitBtn) { submitBtn.disabled = true; submitBtn.innerHTML = "Opening secure checkout…"; }
 
-  // Persist to Supabase (silent fallback if tables aren't set up yet)
   try {
-    const saved = await submitBidToSupabase({
-      spotId, amount, brand, email, website, xHandle, logoFile,
-    });
-    if (saved?.logoUrl) {
-      state.spots[spotId].logo = saved.logoUrl;
-      saveState(state);
+    // 1) Upload logo to public storage. The bucket allows anon insert and is
+    //    unrelated to money — worst case a bogus logo sits in storage and is
+    //    never referenced because Stripe was never paid.
+    let logoUrl = null;
+    if (logoFile) {
+      const ext = (logoFile.name.split(".").pop() || "png").toLowerCase();
+      const key = `${spotId}/${Date.now()}-${crypto.randomUUID().slice(0, 8)}.${ext}`;
+      const { error: upErr } = await sb.storage.from("bmb-logos").upload(key, logoFile, {
+        contentType: logoFile.type,
+        cacheControl: "3600",
+        upsert: false,
+      });
+      if (upErr) throw new Error(`Logo upload failed: ${upErr.message}`);
+      const { data: pub } = sb.storage.from("bmb-logos").getPublicUrl(key);
+      logoUrl = pub?.publicUrl || null;
     }
+
+    // 2) Ask the Edge Function to open a Stripe Checkout session for the 20%
+    //    deposit. Metadata carries the full bid payload — the webhook reads
+    //    it back and inserts the row.
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/bmb-create-checkout`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+      },
+      body: JSON.stringify({
+        spot_id: spotId,
+        amount_cents: dollarsToCents(amount),
+        brand,
+        email,
+        website: website || null,
+        x_handle: xHandle || null,
+        logo_url: logoUrl,
+      }),
+    });
+    const payload = await res.json().catch(() => ({}));
+    if (!res.ok || !payload?.url) {
+      throw new Error(payload?.error || `checkout request failed (${res.status})`);
+    }
+
+    // 3) Redirect. On return the URL will carry ?bid=success or ?bid=cancel —
+    //    see the boot-time toast handler at the very bottom of this file.
+    window.location.href = payload.url;
   } catch (err) {
-    console.warn("[bmb] Bid saved locally but not synced to Supabase:", err.message || err);
+    console.error("[bmb] checkout failed:", err);
+    if (submitBtn) { submitBtn.disabled = false; submitBtn.innerHTML = submitOrig || "Bid"; }
+    alert(`Sorry — couldn't start checkout.\n\n${err.message || err}\n\nNothing was charged. Try again.`);
   }
 });
 

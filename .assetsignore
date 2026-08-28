@@ -1,0 +1,11 @@
+supabase-schema.sql
+supabase-schema-v2.sql
+supabase
+metal_bottle.glb
+.git
+.wrangler
+.gitignore
+.assetsignore
+.secrets
+node_modules
+*.md
