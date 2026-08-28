@@ -307,19 +307,27 @@
         <div class="bm-field">
           <label class="lbl">Logo</label>
           <label class="bm-logo-drop" id="logo-drop">
-            <input type="file" name="logo" id="logo-input" accept="image/png,image/jpeg,image/svg+xml" hidden />
+            <input class="bm-logo-file" type="file" name="logo" id="logo-input" accept="image/png,image/jpeg,image/svg+xml" />
             <div class="logo-drop-inner" id="logo-drop-inner">
-              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                <polyline points="17 8 12 3 7 8"/>
-                <line x1="12" y1="3" x2="12" y2="15"/>
-              </svg>
-              <div class="logo-drop-text"><strong>Upload your logo</strong></div>
-              <div class="logo-drop-fine">PNG · JPG · SVG</div>
+              <div class="logo-icon-wrap" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                  <polyline points="17 8 12 3 7 8"/>
+                  <line x1="12" y1="3" x2="12" y2="15"/>
+                </svg>
+              </div>
+              <div class="logo-drop-text">Drag your logo, or <span class="logo-drop-browse">browse</span></div>
+              <div class="logo-drop-fine">PNG · JPG · SVG · up to 5 MB</div>
             </div>
             <div class="logo-preview" id="logo-preview" hidden>
               <img id="logo-preview-img" alt="Logo preview" />
-              <button type="button" class="logo-remove" id="logo-remove" aria-label="Remove logo">×</button>
+              <div class="logo-preview-info">
+                <div class="logo-preview-name" id="logo-preview-name">logo.png</div>
+                <div class="logo-preview-sub">Ready to ship</div>
+              </div>
+              <button type="button" class="logo-remove" id="logo-remove" aria-label="Remove logo">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
             </div>
           </label>
         </div>

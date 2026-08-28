@@ -601,46 +601,118 @@ footer a:hover { color: var(--teal); }
 .dep-row strong { font-family: var(--serif); font-size: 17px; }
 .dep-fine { font-size: 12px; color: var(--muted); margin: 10px 0 0; line-height: 1.45; }
 
-/* Logo upload drop zone */
+/* Logo upload drop zone — proper card w/ hidden native input */
 .bm-logo-drop {
   display: block;
   border: 1.5px dashed var(--line);
-  padding: 24px 16px;
+  border-radius: 14px;
+  padding: 26px 20px;
   text-align: center;
   cursor: pointer;
-  transition: all 150ms ease;
-  background: white;
+  transition: border-color 150ms ease, background 150ms ease, transform 150ms ease;
+  background: linear-gradient(180deg, #ffffff 0%, #fbf8ef 100%);
   position: relative;
+  overflow: hidden;
 }
 .bm-logo-drop:hover {
   border-color: var(--teal);
-  background: var(--sea-tint);
+  background: linear-gradient(180deg, #ffffff 0%, var(--sea-tint) 100%);
 }
 .bm-logo-drop.drag {
-  border-color: var(--teal); background: var(--sea-tint); border-style: solid;
+  border-color: var(--teal);
+  background: var(--sea-tint);
+  border-style: solid;
+  transform: scale(1.01);
+}
+/* Kill the native <input type="file"> chrome — the whole card is the picker */
+.bm-logo-file {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  opacity: 0 !important;
+  cursor: pointer !important;
+  z-index: 1;
+  padding: 0; margin: 0; border: 0;
 }
 .logo-drop-inner {
-  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  position: relative;
+  z-index: 0;
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  color: var(--muted);
+  pointer-events: none;   /* clicks pass through to the file input above */
+}
+.logo-icon-wrap {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 44px; height: 44px;
+  border-radius: 50%;
+  background: var(--sea-tint);
+  color: var(--teal);
+  margin-bottom: 4px;
+}
+.logo-drop-text {
+  font: 600 14px/1.3 Inter, sans-serif;
+  color: var(--ink);
+}
+.logo-drop-browse {
+  color: var(--teal);
+  border-bottom: 1px dashed var(--teal-soft);
+}
+.logo-drop-fine {
+  font: 500 10px/1.2 Inter, sans-serif;
+  letter-spacing: 0.14em; text-transform: uppercase;
   color: var(--muted);
 }
-.logo-drop-inner svg { color: var(--ink-2); margin-bottom: 2px; }
-.logo-drop-text { font-size: 14px; color: var(--ink); }
-.logo-drop-fine { font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+
+/* Preview state — replaces the drop UI when a file is picked */
 .logo-preview {
   position: relative;
-  display: flex; align-items: center; justify-content: center;
-  min-height: 96px;
+  z-index: 2;
+  display: flex; align-items: center; gap: 14px;
+  padding: 4px 40px 4px 4px;
+  min-height: 64px;
+  text-align: left;
 }
-.logo-preview img { max-height: 96px; max-width: 100%; object-fit: contain; }
+.logo-preview img {
+  width: 64px; height: 64px;
+  object-fit: contain;
+  background: #ffffff;
+  border-radius: 10px;
+  padding: 6px;
+  box-shadow: 0 1px 3px rgba(11,20,22,0.08);
+  flex-shrink: 0;
+}
+.logo-preview-info { flex: 1; min-width: 0; }
+.logo-preview-name {
+  font: 600 14px/1.2 Inter, sans-serif;
+  color: var(--ink);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.logo-preview-sub {
+  font: 500 12px/1.2 Inter, sans-serif;
+  color: var(--teal);
+  margin-top: 2px;
+}
+.logo-preview-sub::before {
+  content: ""; display: inline-block;
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--teal); margin-right: 6px; vertical-align: 1px;
+}
 .logo-remove {
-  position: absolute; top: 4px; right: 4px;
-  background: white; border: 1px solid var(--line);
-  width: 24px; height: 24px; border-radius: 50%;
-  cursor: pointer; font-size: 16px; line-height: 1;
-  display: flex; align-items: center; justify-content: center;
-  padding: 0; color: var(--ink);
+  position: absolute; top: 6px; right: 6px;
+  background: #ffffff; border: 1px solid var(--line);
+  width: 26px; height: 26px; border-radius: 50%;
+  cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 0; color: var(--ink-2);
+  transition: background 140ms ease, color 140ms ease, border-color 140ms ease;
+  z-index: 3;
 }
-.logo-remove:hover { background: var(--paper-2); }
+.logo-remove:hover {
+  background: var(--ink); color: var(--paper); border-color: var(--ink);
+}
+/* When preview is shown, hide the drop-inner instructions */
+.bm-logo-drop:has(#logo-preview:not([hidden])) .logo-drop-inner { display: none; }
 
 .btn-bid-submit {
   margin-top: 6px;
@@ -1154,126 +1226,292 @@ footer a:hover { color: var(--teal); }
 }
 
 /* ---------- Post-purchase share modal ---------- */
+/* Overrides the base .modal backdrop for a softer, more cinematic feel. */
+.modal.share-modal {
+  background: rgba(11, 20, 22, 0.62);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  padding: 24px 16px;
+}
 .share-modal .share-card {
-  max-width: 480px;
-  padding: 32px 30px 24px;
+  max-width: 560px;
+  width: 100%;
+  padding: 0;
+  border-radius: 22px;
+  border: 1px solid var(--line);
+  background: var(--paper);
+  box-shadow: 0 40px 100px rgba(11, 20, 22, 0.42), 0 2px 0 rgba(255,255,255,0.6) inset;
+  overflow: hidden;
+  animation: shareCardIn 420ms cubic-bezier(0.2, 0.9, 0.25, 1);
 }
-.share-header {
-  text-align: left;
-  margin-bottom: 12px;
+@keyframes shareCardIn {
+  from { opacity: 0; transform: translateY(14px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
 }
-.share-eyebrow {
-  display: inline-block;
+.share-modal .modal-close {
+  top: 12px; right: 14px;
+  z-index: 3;
+  color: rgba(242, 237, 226, 0.85);
+  font-size: 24px;
+  mix-blend-mode: normal;
+}
+.share-modal .modal-close:hover { color: #fff; }
+
+/* ---- Poster: CSS-drawn bottle with the winner's logo composited on it ---- */
+.share-poster {
+  position: relative;
+  padding: 28px 24px 22px;
+  background:
+    radial-gradient(120% 90% at 50% 0%, #1a2b2e 0%, #0b1416 55%, #050b0c 100%);
+  color: var(--paper);
+  text-align: center;
+  overflow: hidden;
+}
+.share-poster::before {
+  /* subtle radial spot behind the bottle */
+  content: "";
+  position: absolute; inset: 0;
+  background: radial-gradient(60% 55% at 50% 60%, rgba(14, 124, 123, 0.22) 0%, transparent 70%);
+  pointer-events: none;
+}
+.share-chip {
+  position: relative;
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 11px;
+  border-radius: 999px;
+  background: rgba(22, 163, 74, 0.14);
+  border: 1px solid rgba(22, 163, 74, 0.55);
+  color: #6ee7a3;
   font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-weight: 700;
+  margin-bottom: 14px;
+}
+.share-chip::before {
+  content: "";
+  width: 6px; height: 6px; border-radius: 50%;
+  background: #22c55e;
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.25);
+}
+.share-bottle {
+  /* Stylised CSS bottle silhouette — no image asset required. */
+  position: relative;
+  width: 110px;
+  height: 210px;
+  margin: 4px auto 6px;
+  filter: drop-shadow(0 22px 30px rgba(0,0,0,0.55));
+}
+.share-bottle-cap {
+  position: absolute;
+  top: 0; left: 50%; transform: translateX(-50%);
+  width: 52px; height: 18px;
+  border-radius: 6px 6px 4px 4px;
+  background: linear-gradient(180deg, #4a5457 0%, #2b3436 60%, #1a2224 100%);
+  box-shadow: inset 0 -2px 0 rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.15);
+}
+.share-bottle-neck {
+  position: absolute;
+  top: 16px; left: 50%; transform: translateX(-50%);
+  width: 48px; height: 12px;
+  background: linear-gradient(180deg, #3a4448 0%, #2c3538 100%);
+}
+.share-bottle-body {
+  position: absolute;
+  top: 26px; left: 0; right: 0; bottom: 0;
+  border-radius: 40px 40px 22px 22px / 32px 32px 22px 22px;
+  background:
+    linear-gradient(90deg,
+      rgba(0,0,0,0.55) 0%,
+      rgba(255,255,255,0.10) 22%,
+      rgba(255,255,255,0.32) 48%,
+      rgba(255,255,255,0.10) 74%,
+      rgba(0,0,0,0.55) 100%),
+    linear-gradient(180deg, #cdd3d6 0%, #9aa2a6 55%, #6a7175 100%);
+  box-shadow:
+    inset 0 2px 0 rgba(255,255,255,0.6),
+    inset 0 -8px 18px rgba(0,0,0,0.35);
+  overflow: hidden;
+}
+.share-bottle-body::after {
+  /* highlight streak */
+  content: "";
+  position: absolute;
+  top: 6%; left: 62%;
+  width: 8px; height: 78%;
+  background: linear-gradient(180deg, rgba(255,255,255,0.55), rgba(255,255,255,0));
+  border-radius: 8px;
+  filter: blur(1px);
+}
+.share-bottle-logo {
+  position: absolute;
+  top: 42%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 62px;
+  height: 62px;
+  border-radius: 10px;
+  background: #fff center/contain no-repeat;
+  box-shadow: 0 6px 14px rgba(0,0,0,0.35), 0 0 0 1px rgba(255,255,255,0.9);
+  z-index: 2;
+  animation: shareLogoIn 600ms 200ms cubic-bezier(0.2, 0.9, 0.25, 1) both;
+}
+.share-bottle-logo.is-placeholder {
+  display: grid; place-items: center;
+  background: #fff;
+  font-family: var(--serif);
+  font-size: 28px;
+  color: var(--ink);
+  letter-spacing: -0.02em;
+}
+@keyframes shareLogoIn {
+  from { opacity: 0; transform: translate(-50%, -30%) scale(0.7); }
+  to   { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+
+/* ---- Confetti (lightweight, 8 dots, one burst) ---- */
+.share-confetti {
+  position: absolute; inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 1;
+}
+.share-confetti span {
+  position: absolute;
+  top: 50%; left: 50%;
+  width: 8px; height: 8px;
+  border-radius: 2px;
+  opacity: 0;
+  animation: shareConfetti 1400ms cubic-bezier(0.15, 0.85, 0.35, 1) forwards;
+}
+.share-confetti span:nth-child(1) { background: #0e7c7b; --tx: -140px; --ty: -80px;  --r: -220deg; animation-delay: 60ms; }
+.share-confetti span:nth-child(2) { background: #f2ede2; --tx:  150px; --ty: -70px;  --r:  180deg; animation-delay: 100ms; }
+.share-confetti span:nth-child(3) { background: #22c55e; --tx: -80px;  --ty: -140px; --r: -140deg; animation-delay: 0ms; }
+.share-confetti span:nth-child(4) { background: #7fb8b6; --tx:  110px; --ty: -130px; --r:  260deg; animation-delay: 140ms; }
+.share-confetti span:nth-child(5) { background: #f2ede2; --tx: -170px; --ty:  60px;  --r: -300deg; animation-delay: 80ms; }
+.share-confetti span:nth-child(6) { background: #0e7c7b; --tx:  170px; --ty:  40px;  --r:  120deg; animation-delay: 160ms; }
+.share-confetti span:nth-child(7) { background: #22c55e; --tx: -40px;  --ty: -170px; --r:   90deg; animation-delay: 40ms; }
+.share-confetti span:nth-child(8) { background: #f2ede2; --tx:   60px; --ty: -170px; --r: -110deg; animation-delay: 200ms; }
+@keyframes shareConfetti {
+  0%   { opacity: 0; transform: translate(-50%, -50%) rotate(0deg) scale(0.6); }
+  10%  { opacity: 1; }
+  100% { opacity: 0;
+         transform: translate(calc(-50% + var(--tx)), calc(-50% + var(--ty))) rotate(var(--r)) scale(1); }
+}
+
+/* ---- Body copy area under the poster ---- */
+.share-body {
+  padding: 24px 28px 22px;
+}
+.share-body h3 {
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: 38px;
+  line-height: 1.03;
+  letter-spacing: -0.022em;
+  margin: 0 0 6px;
+  color: var(--ink);
+  text-align: center;
+}
+.share-body h3 em { color: var(--teal); }
+.share-sub {
+  color: var(--muted);
+  font-size: 14.5px;
+  margin: 0 auto 18px;
+  font-weight: 500;
+  text-align: center;
+  max-width: 40ch;
+}
+
+/* ---- Details grid: spot / size / bid / link ---- */
+.share-details {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  background: var(--line-soft);
+  border: 1px solid var(--line-soft);
+  border-radius: 14px;
+  overflow: hidden;
+  margin: 0 0 20px;
+}
+.share-detail {
+  background: #fbf8f0;
+  padding: 12px 14px;
+  min-width: 0;
+}
+.share-detail-label {
+  display: block;
+  font-size: 10px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   font-weight: 700;
-  color: var(--teal);
-  margin-bottom: 12px;
-  padding: 4px 10px;
-  border: 1px solid var(--teal);
-  border-radius: 999px;
-}
-.share-card h3 {
-  font-family: var(--serif);
-  font-weight: 400;
-  font-size: 34px;
-  line-height: 1.05;
-  letter-spacing: -0.02em;
-  margin: 0 0 8px;
-  color: var(--ink);
-}
-.share-sub {
   color: var(--muted);
-  font-size: 14px;
-  margin: 0;
+  margin-bottom: 4px;
+}
+.share-detail-value {
+  display: block;
+  font-family: var(--serif);
+  font-size: 20px;
+  line-height: 1.15;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.share-detail-value.mono {
+  font-family: var(--sans);
+  font-size: 14.5px;
   font-weight: 500;
 }
-.share-pitch {
-  font-size: 14.5px;
-  line-height: 1.5;
-  color: var(--ink-2);
-  margin: 16px 0 22px;
-}
+.share-detail-value a { color: var(--teal); text-decoration: none; }
+.share-detail-value a:hover { text-decoration: underline; }
+
+/* ---- Actions row (3 buttons, side by side on desktop) ---- */
 .share-actions {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 10px;
-  margin-bottom: 18px;
+  margin-bottom: 6px;
+}
+.share-actions[data-has-native="1"] {
+  grid-template-columns: 1fr 1fr 1fr;
 }
 .share-btn {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 14px;
-  width: 100%;
-  padding: 14px 16px;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 14px;
   border: 1px solid var(--line);
   background: #ffffff;
   color: var(--ink);
-  border-radius: 14px;
+  border-radius: 12px;
   cursor: pointer;
-  text-align: left;
   text-decoration: none;
   font-family: inherit;
-  transition: border-color 150ms ease, background 150ms ease, transform 80ms ease;
-}
-.share-btn:hover {
-  border-color: var(--ink);
-  background: var(--paper);
-}
-.share-btn:active { transform: translateY(1px); }
-.share-btn-icon {
-  flex: 0 0 auto;
-  width: 40px; height: 40px;
-  display: grid; place-items: center;
-  border-radius: 12px;
-  background: var(--paper);
-  color: var(--ink);
-}
-.share-btn-body {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.share-btn-label {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
   line-height: 1.2;
+  transition: border-color 150ms ease, background 150ms ease, color 150ms ease, transform 80ms ease;
+  min-width: 0;
 }
-.share-btn-sub {
-  font-size: 12px;
-  color: var(--muted);
-  font-weight: 400;
-  line-height: 1.2;
-}
-.share-btn-x .share-btn-icon {
+.share-btn:hover { border-color: var(--ink); background: var(--paper); }
+.share-btn:active { transform: translateY(1px); }
+.share-btn svg { flex: 0 0 auto; }
+.share-btn-x {
   background: var(--ink);
-  color: #ffffff;
-}
-.share-btn-x:hover {
+  color: #fff;
   border-color: var(--ink);
-  background: var(--ink);
-  color: var(--paper);
 }
-.share-btn-x:hover .share-btn-icon {
-  background: #ffffff;
-  color: var(--ink);
-}
-.share-btn-x:hover .share-btn-sub { color: rgba(242,237,226,0.7); }
-.share-btn-copy .share-btn-icon {
-  background: rgba(14,124,123,0.12);
-  color: var(--teal);
-}
+.share-btn-x:hover { background: #000; border-color: #000; color: #fff; }
 .share-btn.share-btn-copied {
   border-color: var(--teal);
+  color: var(--teal);
   background: rgba(14,124,123,0.06);
 }
-.share-btn.share-btn-copied .share-btn-icon {
-  background: var(--teal);
-  color: #ffffff;
-}
 .share-later {
+  display: block;
   width: 100%;
   background: none;
   border: none;
@@ -1281,16 +1519,20 @@ footer a:hover { color: var(--teal); }
   font-family: inherit;
   font-size: 13px;
   font-weight: 500;
-  padding: 10px;
+  padding: 14px 10px 4px;
   cursor: pointer;
   text-align: center;
 }
-.share-later:hover { color: var(--ink); }
+.share-later:hover { color: var(--ink); text-decoration: underline; }
 
 @media (max-width: 520px) {
-  .share-modal .share-card { padding: 26px 22px 20px; }
-  .share-card h3 { font-size: 28px; }
-  .share-btn { padding: 12px 14px; gap: 12px; }
-  .share-btn-icon { width: 36px; height: 36px; }
+  .share-modal .share-card { max-width: 100%; border-radius: 18px; }
+  .share-poster { padding: 24px 20px 18px; }
+  .share-body { padding: 20px 20px 18px; }
+  .share-body h3 { font-size: 30px; }
+  .share-actions,
+  .share-actions[data-has-native="1"] { grid-template-columns: 1fr; }
+  .share-bottle { width: 96px; height: 184px; }
+  .share-bottle-logo { width: 54px; height: 54px; }
 }
 

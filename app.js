@@ -1283,18 +1283,28 @@ logoInput.addEventListener("change", (e) => {
   reader.onload = () => {
     uploadedLogoDataUrl = reader.result;
     logoPreviewImg.src = reader.result;
+    const nameEl = document.getElementById("logo-preview-name");
+    if (nameEl) {
+      const kb = Math.max(1, Math.round(file.size / 1024));
+      const sizeStr = kb > 1024 ? `${(kb / 1024).toFixed(1)} MB` : `${kb} KB`;
+      nameEl.textContent = `${file.name} · ${sizeStr}`;
+    }
     logoPreview.hidden = false;
     logoDropInner.hidden = true;
   };
   reader.readAsDataURL(file);
 });
 logoRemoveBtn.addEventListener("click", (e) => {
+  // Stop the click from bubbling to the outer label — otherwise clicking X
+  // to remove the file also re-opens the file picker.
   e.preventDefault();
+  e.stopPropagation();
   clearLogo();
 });
 function clearLogo() {
   uploadedLogoDataUrl = null;
   logoInput.value = "";
+  logoPreviewImg.src = "";
   logoPreview.hidden = true;
   logoDropInner.hidden = false;
 }
