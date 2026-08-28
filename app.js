@@ -274,13 +274,17 @@ loader.load(MODEL_URL, (gltf) => {
   const distForWidth  = (Math.max(fSize.x, fSize.z) / 2) / Math.tan(fovRad / 2) / aspect;
   const distance = Math.max(distForHeight, distForWidth) * 1.08;   // small headroom so the cap + bottom don't kiss the edge
   // Start camera on spot #1's axis so the spin naturally reveals #1 first.
+  // Target biased ~12% BELOW center so the bottle+cap sit HIGH in the frame
+  // (cap tucked right under the lede text above the canvas), using the
+  // whitespace efficiently.
   const startTheta = SPOT_CONFIG[0].theta;
+  const lookY = fCenter.y - fSize.y * 0.12;
   camera.position.set(
     distance * Math.cos(startTheta),
-    fCenter.y + fSize.y * 0.05,
+    lookY,
     distance * Math.sin(startTheta)
   );
-  controls.target.set(0, fCenter.y, 0);
+  controls.target.set(0, lookY, 0);
   controls.minDistance = distance * 0.45;
   controls.maxDistance = distance * 1.9;
   controls.update();
