@@ -1484,13 +1484,33 @@ setInterval(syncFromSupabase, 20 * 1000);
     if (outcome === "success") {
       // Webhook usually lands within a second; give it a few tries before
       // giving up. syncFromSupabase() rebuilds the stickers + grid + totals.
+      // Also snapshot the pre-sync state so we can detect the NEW row and
+      // pass it to the share modal.
+      const preSyncSnapshot = snapshotBidState();
       let tries = 0;
-      const poll = () => {
-        if (typeof syncFromSupabase === "function") syncFromSupabase();
+      let opened = false;
+      const openWithBest = (reason) => {
+        if (opened) return;
+        opened = true;
+        openShareModal(pickFreshBid(preSyncSnapshot));
+        try { console.info("[bmb] share modal opened:", reason); } catch (_) {}
+      };
+      const poll = async () => {
+        if (typeof syncFromSupabase === "function") {
+          try { await syncFromSupabase(); } catch (_) {}
+        }
         tries += 1;
+        // As soon as we see a fresh row (newer/higher than the snapshot),
+        // pop the modal and stop polling — no reason to keep spamming.
+        const fresh = pickFreshBid(preSyncSnapshot);
+        if (fresh) { openWithBest("sync-detected-new-row"); return; }
         if (tries < 6) setTimeout(poll, 1500);
       };
       poll();
+      // Hard fallback: even if the webhook is slow / silent, the modal
+      // still opens within 4s using best-guess data. Better than a lonely
+      // toast when the buyer just paid us.
+      setTimeout(() => openWithBest("timeout-fallback"), 4000);
     }
 
     setTimeout(() => {
@@ -1500,5 +1520,175 @@ setInterval(syncFromSupabase, 20 * 1000);
     }, 4500);
   } catch (err) {
     console.warn("[bmb] checkout-return toast failed:", err);
+  }
+
+  // -------- share modal wiring (scoped inside the IIFE) --------
+  const SHARE_URL = "https://brand-my-bottle.pages.dev";
+
+  // Snapshot spot amounts + timestamps BEFORE we sync so we can detect the
+  // one that changed (or newly appeared) as a result of this checkout.
+  function snapshotBidState() {
+    const snap = {};
+    try {
+      if (typeof state !== "undefined" && state?.spots) {
+        for (const [id, s] of Object.entries(state.spots)) {
+          if (s) snap[id] = { amount: s.amount || 0, at: s.at || 0 };
+        }
+      }
+    } catch (_) {}
+    return snap;
+  }
+
+  // Find the bid most likely to be the one we just paid for. Priority:
+  //   1) a spot whose amount went UP since the snapshot
+  //   2) a spot that didn't exist before but does now
+  //   3) fall back to the newest bid overall
+  function pickFreshBid(preSnap) {
+    try {
+      if (typeof state === "undefined" || !state?.spots) return null;
+      let best = null;
+      let bestScore = -Infinity;
+      for (const [id, s] of Object.entries(state.spots)) {
+        if (!s) continue;
+        const prev = preSnap[id];
+        const amount = s.amount || 0;
+        const at = s.at || 0;
+        let score = at; // newer wins by default
+        if (!prev) score += 1e15;                     // brand new spot: strong signal
+        else if (amount > prev.amount) score += 5e14; // outbid: also strong
+        else if (at <= (prev.at || 0)) continue;      // unchanged — skip
+        if (score > bestScore) { bestScore = score; best = { id: Number(id), spot: s }; }
+      }
+      return best;
+    } catch (_) { return null; }
+  }
+
+  function openShareModal(best) {
+    const modal = document.getElementById("share-modal");
+    if (!modal) return;
+
+    // Resolve spot meta + amount for the summary line.
+    const spotId = best?.id || null;
+    const brand  = best?.spot?.brand || "";
+    const amount = best?.spot?.amount || 0;
+    const meta = spotId && typeof SPOT_META !== "undefined"
+      ? (SPOT_META[spotId] || { name: `Spot ${spotId}` })
+      : { name: "your spot" };
+
+    // Title + summary
+    const titleEl = document.getElementById("share-title");
+    const subEl   = document.getElementById("share-sub");
+    if (titleEl) titleEl.textContent = brand ? `You're in, ${brand}!` : "You're in!";
+    if (subEl) {
+      const parts = [];
+      if (spotId) parts.push(`Spot ${spotId}`);
+      if (meta?.name) parts.push(meta.name);
+      if (amount) parts.push(`$${Number(amount).toLocaleString()}`);
+      subEl.textContent = parts.length ? parts.join(" · ") : "Your spot is locked in";
+    }
+
+    // Compose share text — keep it under ~240 chars to be safe.
+    const spotLabel = spotId ? `Spot ${spotId}` : "a spot";
+    const priceTail = amount ? ` for $${Number(amount).toLocaleString()}` : "";
+    const tweetText =
+      `Just claimed ${spotLabel} on Brand My Bottle${priceTail}. ` +
+      `My logo rides on this bottle for the year.`;
+    const shareText =
+      `Just claimed ${spotLabel} on Brand My Bottle${priceTail}. ` +
+      `My logo rides on this bottle for the year — ${SHARE_URL}`;
+
+    // Post-on-X link. We deliberately omit the @brandmybottle mention —
+    // the handle isn't confirmed real and mis-tagging is worse than nothing.
+    const xLink = document.getElementById("share-x");
+    if (xLink) {
+      const href = "https://twitter.com/intent/tweet"
+        + "?text=" + encodeURIComponent(tweetText)
+        + "&url="  + encodeURIComponent(SHARE_URL);
+      xLink.setAttribute("href", href);
+    }
+
+    // Native share (mobile mainly) — hide if the API isn't there.
+    const nativeBtn = document.getElementById("share-native");
+    if (nativeBtn) {
+      if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
+        nativeBtn.hidden = false;
+        nativeBtn.onclick = async () => {
+          try {
+            await navigator.share({
+              title: "Brand My Bottle",
+              text: shareText,
+              url: SHARE_URL,
+            });
+          } catch (err) {
+            if (err && err.name === "AbortError") return; // user dismissed — fine
+            // Fall back to copy on unexpected failure so the click still did something.
+            try { await navigator.clipboard.writeText(SHARE_URL); } catch (_) {}
+          }
+        };
+      } else {
+        nativeBtn.hidden = true;
+      }
+    }
+
+    // Copy link — swap label to "Copied ✓" for 2s.
+    const copyBtn   = document.getElementById("share-copy");
+    const copyLabel = document.getElementById("share-copy-label");
+    if (copyBtn && copyLabel) {
+      copyBtn.onclick = async () => {
+        let ok = false;
+        try {
+          if (navigator.clipboard && window.isSecureContext) {
+            await navigator.clipboard.writeText(SHARE_URL);
+            ok = true;
+          } else {
+            const ta = document.createElement("textarea");
+            ta.value = SHARE_URL;
+            ta.setAttribute("readonly", "");
+            ta.style.position = "fixed";
+            ta.style.top = "-1000px";
+            document.body.appendChild(ta);
+            ta.select();
+            ok = document.execCommand("copy");
+            document.body.removeChild(ta);
+          }
+        } catch (_) { ok = false; }
+        copyLabel.textContent = ok ? "Copied ✓" : "Press Ctrl/⌘+C";
+        copyBtn.classList.toggle("share-btn-copied", ok);
+        setTimeout(() => {
+          copyLabel.textContent = "Copy link";
+          copyBtn.classList.remove("share-btn-copied");
+        }, 2000);
+      };
+    }
+
+    // Close wiring
+    let autoCloseTimer = null;
+    const cancelAutoClose = () => {
+      if (autoCloseTimer) { clearTimeout(autoCloseTimer); autoCloseTimer = null; }
+    };
+    const close = () => {
+      cancelAutoClose();
+      modal.hidden = true;
+      modal.removeEventListener("click", onBackdrop);
+      document.removeEventListener("keydown", onKey);
+    };
+    const onBackdrop = (e) => { if (e.target === modal) close(); };
+    const onKey = (e) => { if (e.key === "Escape") close(); };
+
+    const closeBtn = document.getElementById("share-close");
+    const laterBtn = document.getElementById("share-later");
+    if (closeBtn) closeBtn.onclick = close;
+    if (laterBtn) laterBtn.onclick = close;
+    modal.addEventListener("click", onBackdrop);
+    document.addEventListener("keydown", onKey);
+
+    // Any interaction cancels the auto-close so we don't yank it mid-copy.
+    ["click", "keydown"].forEach(evt => {
+      modal.addEventListener(evt, cancelAutoClose, { once: true });
+    });
+
+    modal.hidden = false;
+    // 45s auto-dismiss — nice-to-have per the spec.
+    autoCloseTimer = setTimeout(close, 45_000);
   }
 })();
