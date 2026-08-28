@@ -98,10 +98,13 @@ em { font-family: var(--serif); font-style: italic; font-weight: 400; letter-spa
   opacity: 0.9;
 }
 .lede {
-  font-size: 15px;
+  /* Scales down on narrow viewports so the whole line stays on ONE line at
+     every screen width — no wrap. clamp(min, viewport-based, max). */
+  font-size: clamp(10px, 2.4vw, 15px);
   color: var(--ink-2);
   margin: 2px 0 0;
-  max-width: 46ch;
+  max-width: 100%;
+  white-space: nowrap;
 }
 
 /* 3D canvas — big and central */
@@ -610,10 +613,11 @@ footer a:hover { color: var(--teal); }
 
 /* Mobile */
 @media (max-width: 640px) {
-  .site-header { padding: 10px 18px; }
-  .site-header nav { gap: 14px; }
-  .stage { padding: 18px 18px 24px; }
-  .canvas-wrap { height: min(600px, 78vh); margin: 8px 0; }
+  .site-header { padding: 8px 14px; }
+  .site-header nav { gap: 12px; }
+  .stage { padding: 6px 14px 18px; }
+  /* Bigger canvas — mobile viewports are tall, use them */
+  .canvas-wrap { height: min(560px, 62vh); max-width: 100%; margin: 4px 0 0; }
   .stat-row { gap: 14px; padding-top: 18px; }
   .stat.divider { height: 24px; }
   .grid-section { padding: 40px 18px 56px; }
@@ -682,18 +686,19 @@ footer a:hover { color: var(--teal); }
 .topbar {
   max-width: 680px;      /* narrower than the hero — feels like a status ribbon, not a section */
   margin: 0 auto;
-  padding: 20px 24px 0;
+  padding: 6px 24px 0;   /* tight to the sticky header — no wasted vertical space above */
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 6px;
 }
 .visitors {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  font: 500 14px/1.3 Inter, sans-serif;
+  gap: 6px;
+  font: 500 12px/1.2 Inter, sans-serif;
   color: var(--ink-2);
   align-self: flex-start;
+  white-space: nowrap;
 }
 .visitors strong { color: var(--ink); font-weight: 700; }
 .visitors-sep    { color: var(--ink-2); font-weight: 400; }
@@ -718,27 +723,27 @@ footer a:hover { color: var(--teal); }
   align-items: baseline;
   justify-content: space-between;
   gap: 16px;
-  margin-bottom: 10px;
+  margin-bottom: 4px;
 }
-.mb-raised { display: inline-flex; align-items: baseline; gap: 8px; }
+.mb-raised { display: inline-flex; align-items: baseline; gap: 6px; }
 .mb-raised-amount {
-  font: 700 34px/1 Inter, sans-serif;
+  font: 700 22px/1 Inter, sans-serif;
   color: #16a34a;
   letter-spacing: -0.02em;
 }
 .mb-raised-label {
-  font: 500 14px/1 Inter, sans-serif;
+  font: 500 13px/1 Inter, sans-serif;
   color: var(--ink-2);
 }
 .mb-goal {
-  font: 500 14px/1 Inter, sans-serif;
+  font: 500 13px/1 Inter, sans-serif;
   color: var(--ink-2);
   text-align: right;
 }
 .mb-goal .mb-goal-hit { color: #16a34a; font-weight: 700; }
 
 .mb-track {
-  height: 10px;
+  height: 6px;
   background: #d9e3d9;
   border-radius: 999px;
   overflow: hidden;
@@ -751,21 +756,24 @@ footer a:hover { color: var(--teal); }
   transition: width 0.6s cubic-bezier(0.16, 1, 0.3, 1);
 }
 .mb-bottom {
-  margin-top: 10px;
-  font: 500 13px/1.4 Inter, sans-serif;
+  margin-top: 5px;
+  font: 500 12px/1.35 Inter, sans-serif;
   color: var(--ink-2);
 }
 .mb-note {
-  margin-top: 4px;
-  font: 400 12px/1.4 Inter, sans-serif;
+  margin-top: 2px;
+  font: 400 11px/1.35 Inter, sans-serif;
   color: var(--ink-2);
   opacity: 0.75;
 }
 
 @media (max-width: 640px) {
-  .topbar { padding: 14px 16px 0; gap: 10px; }
-  .mb-raised-amount { font-size: 26px; }
-  .mb-goal { font-size: 13px; }
+  .topbar { padding: 4px 14px 0; gap: 4px; }
+  .mb-raised-amount { font-size: 20px; }
+  .mb-goal { font-size: 12px; }
+  .mb-bottom, .mb-note { font-size: 11px; }
+  .hero-top { gap: 4px; margin-bottom: 0; }
+  .display { font-size: clamp(22px, 6vw, 34px); }
 }
 
 /* ================================================================
