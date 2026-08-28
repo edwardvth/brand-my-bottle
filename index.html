@@ -240,19 +240,11 @@
         <h2 class="section-h2">Live from the internet.</h2>
         <p class="stats-sub">Real numbers, updated as they change.</p>
       </div>
-      <!-- Refreshed on scroll-in via IntersectionObserver in app.js -->
-      <div id="stats-panel" class="stats-panel">
-        <div class="stats-globe-bg" aria-hidden="true">
-          <svg viewBox="0 0 100 100" width="360" height="360" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round">
-            <circle cx="50" cy="50" r="46"/>
-            <ellipse cx="50" cy="50" rx="46" ry="18"/>
-            <ellipse cx="50" cy="50" rx="18" ry="46"/>
-            <ellipse cx="50" cy="50" rx="36" ry="46"/>
-            <path d="M4 40 Q50 26 96 40"/>
-            <path d="M4 60 Q50 76 96 60"/>
-          </svg>
-        </div>
-        <div class="stats-grid">
+      <!-- Refreshed on scroll-in via IntersectionObserver in app.js.
+           4 stat tiles up top, real SVG world map below (fills country paths
+           by visitor count, from bmb_visitor_countries). -->
+      <div id="stats-panel" class="stats-panel" data-map-src="world-map.svg">
+        <div class="stats-grid stats-grid-compact">
           <div class="stat-tile">
             <div class="stat-tile-num" id="stats-visiting-now">—</div>
             <div class="stat-tile-lbl">visiting right now</div>
@@ -270,8 +262,16 @@
             <div class="stat-tile-lbl">bids placed all-time</div>
           </div>
         </div>
+        <div class="stats-map-wrap">
+          <div id="stats-map" class="stats-map" aria-label="Worldwide visitor map"></div>
+          <div id="stats-map-empty" class="stats-map-empty">Loading world map…</div>
+        </div>
+        <div id="stats-map-top" class="stats-map-top" hidden>
+          <span class="tm-title">Top visitor countries</span>
+          <ol id="stats-map-top-list" class="tm-list"></ol>
+        </div>
         <div class="stats-foot">
-          Detailed breakdown by country + referrer lives on my DataFast dashboard.
+          Origins inferred from your browser's timezone. No IP addresses stored.
         </div>
       </div>
     </section>

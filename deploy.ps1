@@ -20,7 +20,8 @@ $PublicFiles = @(
     "bmb-logo.png",
     "og-card.png",
     "favicon-32.png",
-    "apple-touch-icon.png"
+    "apple-touch-icon.png",
+    "world-map.svg"
 )
 
 Write-Output "Rebuilding dist/..."

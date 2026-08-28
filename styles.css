@@ -900,7 +900,7 @@ footer a:hover { color: var(--teal); }
   color: var(--ink);
 }
 
-/* Live stats panel — real numbers from Supabase, refreshed on scroll-in */
+/* Live stats panel — DataFast realtime dashboard iframe, lazy-mounted */
 .stats-section { padding-top: 32px; padding-bottom: 40px; }
 .stats-sub {
   max-width: 720px;
@@ -910,68 +910,47 @@ footer a:hover { color: var(--teal); }
   text-align: center;
 }
 .stats-panel {
-  max-width: 1000px;
+  max-width: 1100px;
   margin: 28px auto 0;
-  padding: 44px 28px 32px;
-  border-radius: 24px;
+  border-radius: 20px;
+  border: 1px solid rgba(11,20,22,0.08);
   background: var(--ink);
   color: var(--paper);
-  position: relative;
   overflow: hidden;
-  box-shadow: 0 20px 40px rgba(11,20,22,0.08);
-}
-.stats-globe-bg {
-  position: absolute;
-  top: 50%; right: -80px;
-  transform: translateY(-50%);
-  color: rgba(127, 184, 182, 0.13);
-  animation: statsGlobeSpin 40s linear infinite;
-  pointer-events: none;
-}
-@keyframes statsGlobeSpin { to { transform: translateY(-50%) rotate(360deg); } }
-.stats-grid {
   position: relative;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 22px 32px;
-  padding: 4px 6px 10px;
+  min-height: 720px;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 20px 40px rgba(11,20,22,0.06);
 }
-.stat-tile {
-  padding: 2px 4px;
-  border-left: 3px solid var(--teal);
-  padding-left: 14px;
-  transition: transform 200ms cubic-bezier(0.16, 1, 0.3, 1), border-left-color 200ms ease;
+.stats-panel iframe {
+  width: 100%;
+  height: 900px;
+  border: 0;
+  display: block;
+  background: transparent;
+  color-scheme: dark;
 }
-.stat-tile.refreshing {
-  transform: translateX(4px);
-  border-left-color: #22c55e;
-}
-.stat-tile-num {
-  font: 700 clamp(30px, 4vw, 42px)/1 Inter, sans-serif;
-  color: var(--paper);
-  letter-spacing: -0.02em;
-  font-variant-numeric: tabular-nums;
-}
-.stat-tile-lbl {
-  margin-top: 6px;
-  font: 500 12px/1.3 Inter, sans-serif;
-  color: rgba(242, 237, 226, 0.6);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-.stats-foot {
-  position: relative;
-  margin-top: 22px;
-  padding-top: 18px;
-  border-top: 1px solid rgba(255,255,255,0.08);
-  font: 400 13px/1.5 Inter, sans-serif;
-  color: rgba(242, 237, 226, 0.55);
+.stats-placeholder {
+  display: flex; flex-direction: column; align-items: center; gap: 14px;
+  color: rgba(242,237,226,0.55);
+  padding: 60px 20px;
   text-align: center;
+  transition: opacity 400ms ease;
+}
+.stats-panel.mounted .stats-placeholder { opacity: 0; pointer-events: none; position: absolute; }
+.stats-globe {
+  animation: statsGlobeSpin 12s linear infinite;
+  color: var(--teal-soft);
+}
+@keyframes statsGlobeSpin { to { transform: rotate(360deg); } }
+.stats-hint {
+  font: 500 13px/1.3 Inter, sans-serif;
+  letter-spacing: 0.02em;
+  margin: 0;
 }
 @media (max-width: 640px) {
-  .stats-panel { padding: 32px 20px 24px; }
-  .stats-globe-bg { display: none; }
-  .stats-grid { grid-template-columns: repeat(2, 1fr); gap: 20px 18px; }
+  .stats-panel { min-height: 560px; }
+  .stats-panel iframe { height: 720px; }
 }
 
 /* See stats button in the visitor pill row */

@@ -26,8 +26,14 @@ const CORS = {
 // RFC 4122 v4 UUID: 8-4-4-4-12 hex, version nibble = 4, variant nibble ∈ [8,9,a,b].
 const UUID_V4_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+// ISO-3166-1 alpha-2: exactly two uppercase A–Z letters (e.g. "US", "DE").
+// Anything else — lowercase, numbers, three letters, blank — is silently
+// dropped rather than failing the whole heartbeat.
+const CC_RE = /^[A-Z]{2}$/;
+
 interface BeatBody {
   token?: string;
+  country_code?: string;
 }
 
 Deno.serve(async (req) => {
@@ -56,13 +62,29 @@ Deno.serve(async (req) => {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
+  // Optional country_code — validated as ISO-3166-1 alpha-2; anything else
+  // is dropped silently so a bad timezone lookup never fails the heartbeat.
+  const rawCc = (body.country_code ?? "").toString().trim().toUpperCase();
+  const countryCode = CC_RE.test(rawCc) ? rawCc : null;
+
   // UPSERT: new tokens get first_seen = last_seen = now() (defaults). Existing
   // tokens have last_seen bumped. We set last_seen explicitly on the client
   // side of the upsert so the ON CONFLICT path updates it.
+  //
+  // country_code is only overwritten when the incoming value is non-null, so
+  // a beat that happens to be missing it (client sent {}, or unknown zone)
+  // never drops previously-good data. To do that we split into two calls:
+  // an insert-only upsert to guarantee the row exists, then a conditional
+  // update. Cheaper: use a single upsert and, if we DO have a country, let
+  // it overwrite (same country in 99% of cases; a legitimate move is fine).
+  // If we DON'T have a country, omit the column entirely so ON CONFLICT
+  // leaves it untouched.
   const nowIso = new Date().toISOString();
+  const row: Record<string, unknown> = { token, last_seen: nowIso };
+  if (countryCode) row.country_code = countryCode;
   const { error: upsertErr } = await sb
     .from("bmb_visitors")
-    .upsert({ token, last_seen: nowIso }, { onConflict: "token" });
+    .upsert(row, { onConflict: "token" });
 
   if (upsertErr) {
     console.error("bmb-beat upsert failed:", upsertErr.message);
