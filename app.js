@@ -1531,12 +1531,16 @@ syncFromSupabase();
 // Poll every 20s for competing bids
 setInterval(syncFromSupabase, 20 * 1000);
 
-// ---------- DataFast worldwide map: lazy-mount iframe on scroll-in ----------
-// The <div id="stats-panel"> at the bottom holds the DataFast realtime
-// share URL in data-src. We inject the iframe ONLY when the section scrolls
-// into view — no request on initial page render, so the bottle GLB gets
-// bandwidth uncontested. Re-entering the section reloads the iframe (fresh
-// map data), but no more than once every 30s.
+// ---------- Live stats panel: 4 tiles + worldwide visitor map ----------
+// Panel at #stats-panel shows visiting-now / total-visitors / raised / bids
+// (from bmb_stats + bmb_bids) plus an SVG world map coloured by
+// bmb_visitor_countries. Nothing loads on initial page render — the bottle
+// GLB gets uncontested bandwidth. The map SVG is fetched once (lazy), the
+// data is refreshed every time the panel scrolls back into view (30 s min).
+//
+// Country IDs in world-map.svg are ISO-3166-1 alpha-2 lowercase (`id="us"`,
+// `id="de"`). The Supabase view returns alpha-2 uppercase; we lowercase to
+// look them up.
 (function initStatsPanel() {
   const el = document.getElementById("stats-panel");
   if (!el) return;

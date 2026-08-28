@@ -900,7 +900,7 @@ footer a:hover { color: var(--teal); }
   color: var(--ink);
 }
 
-/* Live stats panel — DataFast realtime dashboard iframe, lazy-mounted */
+/* Live stats panel — 4 tiles + our own SVG world visitor map */
 .stats-section { padding-top: 32px; padding-bottom: 40px; }
 .stats-sub {
   max-width: 720px;
@@ -912,45 +912,138 @@ footer a:hover { color: var(--teal); }
 .stats-panel {
   max-width: 1100px;
   margin: 28px auto 0;
-  border-radius: 20px;
-  border: 1px solid rgba(11,20,22,0.08);
+  padding: 28px 28px 26px;
+  border-radius: 24px;
   background: var(--ink);
   color: var(--paper);
-  overflow: hidden;
   position: relative;
-  min-height: 720px;
-  display: flex; align-items: center; justify-content: center;
-  box-shadow: 0 20px 40px rgba(11,20,22,0.06);
+  overflow: hidden;
+  box-shadow: 0 20px 40px rgba(11,20,22,0.08);
 }
-.stats-panel iframe {
+/* Compact tiles up top — smaller than the original hero variant so the
+   map below them gets primary attention. */
+.stats-grid-compact {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 14px 22px;
+  padding: 4px 4px 6px;
+  margin-bottom: 22px;
+}
+.stat-tile {
+  padding: 4px 0 4px 12px;
+  border-left: 3px solid var(--teal);
+  transition: transform 200ms cubic-bezier(0.16, 1, 0.3, 1), border-left-color 200ms ease;
+}
+.stat-tile.refreshing {
+  transform: translateX(4px);
+  border-left-color: #22c55e;
+}
+.stat-tile-num {
+  font: 700 clamp(22px, 2.6vw, 30px)/1 Inter, sans-serif;
+  color: var(--paper);
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+.stat-tile-lbl {
+  margin-top: 5px;
+  font: 500 10.5px/1.25 Inter, sans-serif;
+  color: rgba(242, 237, 226, 0.55);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.stats-map-wrap {
+  position: relative;
   width: 100%;
-  height: 900px;
-  border: 0;
+  height: 500px;
+  border-radius: 14px;
+  overflow: hidden;
+  background: rgba(255,255,255,0.02);
+}
+.stats-map {
+  width: 100%;
+  height: 100%;
   display: block;
-  background: transparent;
-  color-scheme: dark;
 }
-.stats-placeholder {
-  display: flex; flex-direction: column; align-items: center; gap: 14px;
-  color: rgba(242,237,226,0.55);
-  padding: 60px 20px;
-  text-align: center;
-  transition: opacity 400ms ease;
+.stats-map .world-svg,
+.stats-map svg {
+  width: 100%;
+  height: 100%;
+  display: block;
 }
-.stats-panel.mounted .stats-placeholder { opacity: 0; pointer-events: none; position: absolute; }
-.stats-globe {
-  animation: statsGlobeSpin 12s linear infinite;
-  color: var(--teal-soft);
+/* Every country path defaults to a low-contrast greyish ink so the map
+   reads as an unlit world; visited countries get inline fill=var(--teal). */
+.stats-map svg path {
+  fill: rgba(242, 237, 226, 0.08);
+  stroke: rgba(242, 237, 226, 0.14);
+  stroke-width: 0.3;
+  transition: fill 400ms ease, opacity 400ms ease;
 }
-@keyframes statsGlobeSpin { to { transform: rotate(360deg); } }
-.stats-hint {
+.stats-map svg path[data-bmb-visited="1"] {
+  stroke: rgba(14, 124, 123, 0.6);
+  stroke-width: 0.4;
+}
+.stats-map-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(242,237,226,0.4);
   font: 500 13px/1.3 Inter, sans-serif;
-  letter-spacing: 0.02em;
-  margin: 0;
+  letter-spacing: 0.04em;
+  pointer-events: none;
+}
+.stats-map-top {
+  margin-top: 18px;
+  padding: 12px 14px;
+  background: rgba(255,255,255,0.03);
+  border-radius: 12px;
+}
+.stats-map-top .tm-title {
+  display: block;
+  font: 600 10.5px/1 Inter, sans-serif;
+  color: rgba(242,237,226,0.55);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 10px;
+}
+.stats-map-top .tm-list {
+  list-style: none;
+  margin: 0; padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 22px;
+}
+.stats-map-top .tm-list li {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font: 600 13px/1 Inter, sans-serif;
+  color: var(--paper);
+  font-variant-numeric: tabular-nums;
+}
+.stats-map-top .tm-flag { font-size: 16px; line-height: 1; }
+.stats-map-top .tm-code {
+  color: var(--teal-soft);
+  letter-spacing: 0.04em;
+}
+.stats-map-top .tm-n {
+  color: rgba(242,237,226,0.75);
+  font-weight: 500;
+}
+.stats-foot {
+  position: relative;
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(255,255,255,0.08);
+  font: 400 12.5px/1.5 Inter, sans-serif;
+  color: rgba(242, 237, 226, 0.5);
+  text-align: center;
 }
 @media (max-width: 640px) {
-  .stats-panel { min-height: 560px; }
-  .stats-panel iframe { height: 720px; }
+  .stats-panel { padding: 22px 16px 20px; border-radius: 18px; }
+  .stats-grid-compact { grid-template-columns: repeat(2, 1fr); gap: 14px; }
+  .stats-map-wrap { height: 360px; }
 }
 
 /* See stats button in the visitor pill row */

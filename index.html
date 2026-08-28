@@ -240,38 +240,20 @@
         <h2 class="section-h2">Live from the internet.</h2>
         <p class="stats-sub">Real numbers, updated as they change.</p>
       </div>
-      <!-- Refreshed on scroll-in via IntersectionObserver in app.js.
-           4 stat tiles up top, real SVG world map below (fills country paths
-           by visitor count, from bmb_visitor_countries). -->
-      <div id="stats-panel" class="stats-panel" data-map-src="world-map.svg">
-        <div class="stats-grid stats-grid-compact">
-          <div class="stat-tile">
-            <div class="stat-tile-num" id="stats-visiting-now">—</div>
-            <div class="stat-tile-lbl">visiting right now</div>
+      <!-- DataFast public share dashboard, lazy-mounted iframe. -->
+      <div id="stats-panel" class="stats-panel"
+           data-src="https://datafa.st/share/6a91db7cdf246c0657dfa2d6?realtime=1">
+        <div class="stats-placeholder" aria-hidden="true">
+          <div class="stats-globe">
+            <svg viewBox="0 0 100 100" width="80" height="80" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+              <circle cx="50" cy="50" r="42"/>
+              <ellipse cx="50" cy="50" rx="42" ry="16"/>
+              <ellipse cx="50" cy="50" rx="16" ry="42"/>
+              <path d="M12 42 Q50 26 88 42"/>
+              <path d="M12 58 Q50 74 88 58"/>
+            </svg>
           </div>
-          <div class="stat-tile">
-            <div class="stat-tile-num" id="stats-total-visitors">—</div>
-            <div class="stat-tile-lbl">visitors so far</div>
-          </div>
-          <div class="stat-tile">
-            <div class="stat-tile-num" id="stats-raised">$0</div>
-            <div class="stat-tile-lbl">raised toward the $50 goal</div>
-          </div>
-          <div class="stat-tile">
-            <div class="stat-tile-num" id="stats-bids">0</div>
-            <div class="stat-tile-lbl">bids placed all-time</div>
-          </div>
-        </div>
-        <div class="stats-map-wrap">
-          <div id="stats-map" class="stats-map" aria-label="Worldwide visitor map"></div>
-          <div id="stats-map-empty" class="stats-map-empty">Loading world map…</div>
-        </div>
-        <div id="stats-map-top" class="stats-map-top" hidden>
-          <span class="tm-title">Top visitor countries</span>
-          <ol id="stats-map-top-list" class="tm-list"></ol>
-        </div>
-        <div class="stats-foot">
-          Origins inferred from your browser's timezone. No IP addresses stored.
+          <p class="stats-hint">Loading live map…</p>
         </div>
       </div>
     </section>
