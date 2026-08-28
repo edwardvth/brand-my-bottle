@@ -169,6 +169,9 @@ loader.load(MODEL_URL, (gltf) => {
   // stand / duplicate bottles that live elsewhere in the scene.
   const bodyRoot = findNodeByName(root, BODY_NODE_NAME);
   const keepMeshes = new Set();
+  // Track the cap mesh separately — it needs a DIFFERENT material or it
+  // visually merges into the body (chrome-on-chrome, no visible cap).
+  let capMesh = null;
   if (bodyRoot) {
     bodyRoot.traverse((child) => {
       if (child.isMesh && child.geometry) {
@@ -180,6 +183,11 @@ loader.load(MODEL_URL, (gltf) => {
           bottleMesh = child;
         }
       }
+    });
+    // Anything under Water Bottle_5 that isn't the body IS the cap (there's
+    // exactly one such mesh in this GLB: Object_14).
+    bodyRoot.traverse((child) => {
+      if (child.isMesh && child !== bottleMesh) capMesh = child;
     });
   }
   // Fallback: tallest mesh anywhere
@@ -204,16 +212,26 @@ loader.load(MODEL_URL, (gltf) => {
     roughness: 0.12,
     envMapIntensity: 1.4,
   });
+  // Dark screw-cap material — softer highlight than the mirror body so the
+  // cap reads as a distinct dark ring on top of the bottle.
+  const capMat = new THREE.MeshStandardMaterial({
+    color: 0x1a1a1a,
+    metalness: 0.6,
+    roughness: 0.45,
+    envMapIntensity: 1.0,
+  });
   root.traverse((child) => {
     if (!child.isMesh) return;
     if (!keepMeshes.has(child)) {
       child.visible = false;
       hiddenCount++;
+      return;
     }
+    const mat = (child === capMesh) ? capMat : silverMat;
     if (Array.isArray(child.material)) {
-      child.material = child.material.map(() => silverMat);
+      child.material = child.material.map(() => mat);
     } else if (child.material) {
-      child.material = silverMat;
+      child.material = mat;
     }
   });
 
